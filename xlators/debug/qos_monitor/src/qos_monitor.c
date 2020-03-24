@@ -516,7 +516,7 @@ qos_monitor_writev_cbk (call_frame_t *frame,
 				monitor_data->write_delay.value = (monitor_data->write_delay.value + time_difference_ms(&begin, &end)) / 2;
 				gf_log("sh", GF_LOG_ERROR, "value = %lf", monitor_data->write_delay.value);
 			}
-			
+			data_unref(data_from_ptr((void*)monitor_data));
 			dict_unref(priv->metrics);			
 			gf_log("sh", GF_LOG_ERROR, "qos_monitor_writev_cbk prepared.");
 		} else {
@@ -544,12 +544,11 @@ qos_monitor_writev (call_frame_t *frame,
 		client_id_t *client = NULL;
 		struct qos_monitor_data *monitor_data = NULL;
 		int ret = 0;
+		int first = 0;
 		
 		gf_log("sh", GF_LOG_ERROR, "enter qos_monitor_writev.");
         priv = this->private;
-		gf_log("sh", GF_LOG_ERROR, "client");
 		client = (client_id_t*) frame->root->trans;
-		gf_log("sh", GF_LOG_ERROR, "get client");
 
 		LOCK(&priv->lock);
 		gf_log("sh", GF_LOG_ERROR, "lock");
@@ -560,6 +559,7 @@ qos_monitor_writev (call_frame_t *frame,
 			ret = dict_get_ptr(priv->metrics, client->id, (void **)&monitor_data);
 			gf_log("sh", GF_LOG_ERROR, "dict_get_ptr fini.");
 			if (ret != 0) {
+				first = 1;
 				gf_log("sh", GF_LOG_ERROR, "monitor_data doesn't exist.");
 				monitor_data = CALLOC (1, sizeof(*monitor_data));
 				ERR_ABORT (monitor_data);  
@@ -568,6 +568,7 @@ qos_monitor_writev (call_frame_t *frame,
 				if (ret != 0)
 					gf_log("sh", GF_LOG_ERROR, "dict set failed.");
 			} else {
+				first = 0;
 				gf_log("sh", GF_LOG_ERROR, "monitor_data exist.");
 				monitor_data = (struct qos_monitor_data *)monitor_data;	
 			} /* end if monitor_data == NULL */
@@ -575,6 +576,8 @@ qos_monitor_writev (call_frame_t *frame,
 			gf_log("sh", GF_LOG_ERROR, "get write_delay.wind_at.");
 			gettimeofday(&monitor_data->write_delay.wind_at, NULL);
 			monitor_data->data_iops++;
+			if (first)
+				data_unref(data_from_ptr((void *)monitor_data));
 			dict_unref(priv->metrics);
 			gf_log("sh", GF_LOG_ERROR, "qos_monitor_writev prepared.");
 		} else {
