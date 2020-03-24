@@ -398,7 +398,7 @@ void * _qos_monitor_thread(xlator_t *this)
 		
 		/* publish monitor metrics */
 		gf_log(this->name, GF_LOG_INFO, "--- qos monitor publisher ---");
-		dict_foreach(metrics, func, priv);
+		// dict_foreach(metrics, func, priv);
 		if (metrics != NULL) {
 			dict_destroy(metrics);
 			metrics = NULL;
@@ -503,6 +503,7 @@ qos_monitor_writev_cbk (call_frame_t *frame,
 		if (priv->metrics != NULL) {
 			dict_ref(priv->metrics);
 			ret = dict_get_ptr(priv->metrics, client->id, (void **)&monitor_data);
+			gf_log("sh", GF_LOG_ERROR, "dict_get_ptr fini.");
 			if (ret != 0) {
 				gf_log("sh", GF_LOG_ERROR, "dict_get_ptr failed.");
 			} else {
@@ -557,7 +558,7 @@ qos_monitor_writev (call_frame_t *frame,
 			dict_ref(priv->metrics);
 			gf_log("sh", GF_LOG_ERROR, "dict_get_ptr.");
 			ret = dict_get_ptr(priv->metrics, client->id, (void **)&monitor_data);
-		
+			gf_log("sh", GF_LOG_ERROR, "dict_get_ptr fini.");
 			if (ret != 0) {
 				gf_log("sh", GF_LOG_ERROR, "monitor_data doesn't exist.");
 				monitor_data = CALLOC (1, sizeof(*monitor_data));
