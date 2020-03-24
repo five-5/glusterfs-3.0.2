@@ -503,7 +503,7 @@ qos_monitor_writev_cbk (call_frame_t *frame,
 				end = monitor_data->write_delay.unwind_at;
 				duration = (time_difference(&begin, &end) != 0 ? time_difference(&begin, &end) : 1);
 				monitor_data->data_written = (monitor_data->data_written + op_ret / duration) / 2;
-				monitor_data->value = (monitor_data->value + duration ) / 2;
+				monitor_data->write_delay.value = (monitor_data->write_delay.value + time_difference(&begin, &end)) / 2;
 			}
 			
 			dict_unref(priv->metrics);			
