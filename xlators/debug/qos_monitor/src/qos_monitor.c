@@ -489,7 +489,7 @@ qos_monitor_writev_cbk (call_frame_t *frame,
         priv = this->private;
 		client = (client_id_t*) frame->root->trans;
 		
-		LOCK(priv->lock);
+		LOCK(&priv->lock);
 		if (priv->metrics != NULL) {
 			dict_ref(priv->metrics);
 			ret = dict_get_ptr(priv->metrics, client->id, (void **)&monitor_data);
@@ -510,7 +510,7 @@ qos_monitor_writev_cbk (call_frame_t *frame,
 		} else {
 			gf_log("sh", GF_LOG_ERROR, "priv->metrics == NULL.");
 		}
-		UNLOCK(priv->lock);
+		UNLOCK(&priv->lock);
 
 		gf_log("sh", GF_LOG_ERROR, "qos_monitor_writev_cbk unwind start.");
 		STACK_UNWIND (frame, op_ret, op_errno, prebuf, postbuf);
@@ -539,7 +539,7 @@ qos_monitor_writev (call_frame_t *frame,
 		client = (client_id_t*) frame->root->trans;
 		gf_log("sh", GF_LOG_ERROR, "get client");
 
-		LOCK(priv->lock);
+		LOCK(&priv->lock);
 		gf_log("sh", GF_LOG_ERROR, "lock");
 		if (priv->metrics != NULL) {
 			gf_log("sh", GF_LOG_ERROR, "priv->metrics != NULL.");
@@ -568,7 +568,7 @@ qos_monitor_writev (call_frame_t *frame,
 		} else {
 			gf_log("sh", GF_LOG_ERROR, "priv->metrics == NULL.");
 		}
-		UNLOCK(priv->lock);
+		UNLOCK(&priv->lock);
 		gf_log("sh", GF_LOG_ERROR, "unlock");
 		
         gf_log("sh", GF_LOG_ERROR, "start wind.");
