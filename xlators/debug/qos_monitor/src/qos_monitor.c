@@ -279,12 +279,11 @@ qos_monitor_data_clear(dict_t *metrics)
 	gf_log("monitor", GF_LOG_ERROR, "qos_monitor_data_clear finished.");
 }
 
-char * get_server_ip()
+void get_server_ip(char *result)
 {
 	struct ifaddrs *ifAddrStruct = NULL;
     struct ifaddrs *ifa = NULL;
     void *tmpAddrPtr = NULL;
-	char result[16] = "";
 	
     getifaddrs(&ifAddrStruct);
  
@@ -317,8 +316,6 @@ char * get_server_ip()
 	{
 		freeifaddrs(ifAddrStruct);
 	}
-	
-	return result;
 }
 
 // TODO：待优化发送写法以及指标获取写法：初步想法用数组和下标+枚举类型对应
@@ -330,37 +327,32 @@ void func(dict_t *this, char *key, data_t *value, void *data)
 	struct qos_monitor_data *monitor_data = NULL;
 	struct timeval now;
 	char client[CLIENTID];
-	char *server_ip;
+	char server_ip[16];
 	double duration = 0;
 	
 	priv = (qos_monitor_private_t *)data;
 	monitor_data = (struct qos_monitor_data *)data_to_ptr(value);
 	gettimeofday(&now, NULL);
 	get_client_id(key, client); 
-	server_ip = get_server_ip();
+	get_server_ip(server_ip);
 	
 	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_wbw", monitor_data->data_written);
 	publish(priv->publisher->channel, message, priv->publisher);
-	gf_log("monitor", GF_LOG_ERROR, "publish message: %s", message);
 
 	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_rbw", monitor_data->data_read);
 	publish(priv->publisher->channel, message, priv->publisher);
-	gf_log("monitor", GF_LOG_ERROR, "publish message: %s", message);
-
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_w_delay", monitor_data->write_delay.value);
-	publish(priv->publisher->channel, message, priv->publisher);
-	gf_log("monitor", GF_LOG_ERROR, "publish message: %s", message);
 
 	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_r_delay", monitor_data->read_delay.value);
 	publish(priv->publisher->channel, message, priv->publisher);
-	gf_log("monitor", GF_LOG_ERROR, "publish message: %s", message);
+
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_w_delay", monitor_data->write_delay.value);
+	publish(priv->publisher->channel, message, priv->publisher);
 
 	duration = time_difference(&monitor_data->started_at ,&now);
 	if (duration == 0)
 		duration = 1;
 	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_diops", monitor_data->data_iops / duration);
 	publish(priv->publisher->channel, message, priv->publisher);
-	gf_log("monitor", GF_LOG_ERROR, "publish message: %s", message);
 }
 
 void * _qos_monitor_thread(xlator_t *this)
@@ -503,6 +495,7 @@ qos_monitor_writev_cbk (call_frame_t *frame,
 				duration = (time_difference(&begin, &end) != 0 ? time_difference(&begin, &end) : 1);
 				monitor_data->data_written = (monitor_data->data_written + op_ret / duration) / 2;
 				monitor_data->write_delay.value = (monitor_data->write_delay.value + time_difference(&begin, &end)) / 2;
+				gf_log("sh", GF_LOG_ERROR, "value = %lf", monitor_data->write_delay.value);
 			}
 			
 			dict_unref(priv->metrics);			
