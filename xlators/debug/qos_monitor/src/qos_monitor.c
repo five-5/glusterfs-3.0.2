@@ -35,6 +35,7 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <sys/time.h>
 
 /* return the difference of begin and end by second*/
 double time_difference(struct timeval *begin, struct timeval *end)
@@ -44,6 +45,16 @@ double time_difference(struct timeval *begin, struct timeval *end)
 		return duration;
 	duration = (end->tv_sec - begin->tv_sec) + ((end->tv_usec - begin->tv_usec) / 1000000);
 	return duration;
+}
+
+
+void sleep_us(unsigned int nusecs)
+{
+    struct timeval	tval;
+ 
+    tval.tv_sec = nusecs / 1000000;
+    tval.tv_usec = nusecs % 1000000;
+    select(0, NULL, NULL, NULL, &tval);
 }
 
 /* return the index of n-th pos that f appears in str*/
@@ -262,11 +273,12 @@ int publish(const char *channel_name, const char *message, void *pthis)
 }
 
 
-void get_server_ip(char *result)
+char * get_server_ip()
 {
 	struct ifaddrs *ifAddrStruct = NULL;
     struct ifaddrs *ifa = NULL;
     void *tmpAddrPtr = NULL;
+	char result[16] = "";
 
     getifaddrs(&ifAddrStruct);
 
@@ -308,9 +320,9 @@ void *_qos_monitor_thread(xlator_t *this)
 {
 	qos_monitor_private_t *priv = NULL;
 	int old_cancel_type;
-	char message[200];
+	char message[120];
 	struct timeval now;
-    char server_ip[16];
+    char *server_ip;
     int times = 1;
 	int i = 0;
 
@@ -333,12 +345,13 @@ void *_qos_monitor_thread(xlator_t *this)
 		/* publish monitor metrics */
  
         gettimeofday(&now, NULL);
-        get_server_ip(server_ip);
+        server_ip = get_server_ip();
 
 		for (i = 0; i < 5; ++i) {
 			sprintf(message, "%s^^%ld^^%s^^%d", server_ip, now.tv_sec, "invoke_times", times);
+			gf_log("monitor", GF_LOG_ERROR, "[%s]: %s", priv->publisher->channel, message);
 			publish(priv->publisher->channel, message, priv->publisher);
-			
+			sleep_us(1);
 			++times;
 		}
         
