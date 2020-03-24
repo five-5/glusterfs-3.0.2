@@ -537,6 +537,7 @@ qos_monitor_writev (call_frame_t *frame,
         priv = this->private;
 		gf_log("sh", GF_LOG_ERROR, "client");
 		client = (client_id_t*) frame->root->trans;
+		gf_log("sh", GF_LOG_ERROR, "get client");
 
 		LOCK(priv->lock);
 		gf_log("sh", GF_LOG_ERROR, "lock");
