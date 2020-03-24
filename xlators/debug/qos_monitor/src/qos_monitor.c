@@ -347,11 +347,11 @@ void func(dict_t *this, char *key, data_t *value, void *data)
 	publish(priv->publisher->channel, message, priv->publisher);
 	gf_log("monitor", GF_LOG_ERROR, "publish message: %s", message);
 
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_w_delay", monitor_data->write_delay);
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_w_delay", monitor_data->write_delay.value);
 	publish(priv->publisher->channel, message, priv->publisher);
 	gf_log("monitor", GF_LOG_ERROR, "publish message: %s", message);
 
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_r_delay", monitor_data->read_delay);
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_r_delay", monitor_data->read_delay.value);
 	publish(priv->publisher->channel, message, priv->publisher);
 	gf_log("monitor", GF_LOG_ERROR, "publish message: %s", message);
 
@@ -367,7 +367,7 @@ void * _qos_monitor_thread(xlator_t *this)
 {
 	qos_monitor_private_t *priv = NULL;
 	int old_cancel_type;
-	dict_t *metrics;
+	dict_t *metrics = NULL;
 	
 	priv = this->private;
 	gf_log(this->name, GF_LOG_ERROR,
@@ -387,18 +387,19 @@ void * _qos_monitor_thread(xlator_t *this)
 		
 		LOCK(&priv->lock);
 		{
+			gf_log(this->name, GF_LOG_ERROR, "copy");
 			metrics = dict_copy_with_ref(priv->metrics, metrics);
 			qos_monitor_data_clear(priv->metrics);
-			gf_log(this->name, GF_LOG_ERROR, "clear metrics");
 		}
 		UNLOCK(&priv->lock);
 		
 		/* publish monitor metrics */
 		gf_log(this->name, GF_LOG_INFO, "--- qos monitor publisher ---");
 		dict_foreach(metrics, func, priv);
+		dict_destroy(metrics);
 	}
-	
-	dict_destroy(metrics);
+	if (metrics != NULL)
+		dict_destroy(metrics);
 	priv->monitor_thread_running = 0;
 	gf_log(this->name, GF_LOG_ERROR, "QoS_monitor monitor thread terminated");
     return NULL;
@@ -454,15 +455,17 @@ void qos_private_destroy(qos_monitor_private_t *priv)
 
 void  _qos_init_monitor_data(struct qos_monitor_data *monitor_data)
 {
-	monitor_data->data_written = 0;
-	monitor_data->data_read = 0;
-	monitor_data->data_iops = 0;
+	monitor_data->data_written = 0.0;
+	monitor_data->data_read = 0.0;
+	monitor_data->data_iops = 0.0;
 	gettimeofday(&monitor_data->started_at, NULL);
 	// TODO: whether it's ok to set this initial.
 	monitor_data->write_delay.wind_at = monitor_data->started_at;
 	monitor_data->write_delay.unwind_at = monitor_data->started_at;
+    monitor_data->write_delay.value = 0.0;
 	monitor_data->read_delay.wind_at = monitor_data->started_at;
 	monitor_data->read_delay.unwind_at = monitor_data->started_at;
+	monitor_data->read_delay.value = 0.0;
 	gf_log("sh", GF_LOG_ERROR, "qos_monitor_data initted.");
 }
 
@@ -500,6 +503,7 @@ qos_monitor_writev_cbk (call_frame_t *frame,
 				end = monitor_data->write_delay.unwind_at;
 				duration = (time_difference(&begin, &end) != 0 ? time_difference(&begin, &end) : 1);
 				monitor_data->data_written = (monitor_data->data_written + op_ret / duration) / 2;
+				monitor_data->value = (monitor_data->value + duration ) / 2;
 			}
 			
 			dict_unref(priv->metrics);			

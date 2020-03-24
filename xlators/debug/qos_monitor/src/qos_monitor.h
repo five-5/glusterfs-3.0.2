@@ -63,6 +63,7 @@ typedef struct CRedisPublisher {
 struct qos_local {
 	struct timeval wind_at;
 	struct timeval unwind_at;
+	double value;
 };
 
 struct qos_monitor_data {
