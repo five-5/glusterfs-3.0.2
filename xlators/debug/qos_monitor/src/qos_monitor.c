@@ -392,13 +392,13 @@ void * _qos_monitor_thread(xlator_t *this)
 		{
 			gf_log(this->name, GF_LOG_ERROR, "copy");
 			metrics = dict_copy(priv->metrics, metrics);
-			qos_monitor_data_clear(priv->metrics);
+			//qos_monitor_data_clear(priv->metrics);
 		}
 		UNLOCK(&priv->lock);
 		
 		/* publish monitor metrics */
 		gf_log(this->name, GF_LOG_INFO, "--- qos monitor publisher ---");
-		// dict_foreach(metrics, func, priv);
+		dict_foreach(metrics, func, priv);
 		if (metrics != NULL) {
 			dict_destroy(metrics);
 			metrics = NULL;
@@ -555,9 +555,11 @@ qos_monitor_writev (call_frame_t *frame,
 		if (priv->metrics != NULL) {
 			gf_log("sh", GF_LOG_ERROR, "priv->metrics != NULL.");
 			dict_ref(priv->metrics);
+
 			gf_log("sh", GF_LOG_ERROR, "dict_get_ptr.");
 			ret = dict_get_ptr(priv->metrics, client->id, (void **)&monitor_data);
 			gf_log("sh", GF_LOG_ERROR, "dict_get_ptr fini.");
+
 			if (ret != 0) {
 				first = 1;
 				gf_log("sh", GF_LOG_ERROR, "monitor_data doesn't exist.");
@@ -576,6 +578,7 @@ qos_monitor_writev (call_frame_t *frame,
 			gf_log("sh", GF_LOG_ERROR, "get write_delay.wind_at.");
 			gettimeofday(&monitor_data->write_delay.wind_at, NULL);
 			monitor_data->data_iops++;
+
 			if (first)
 				data_unref(data_from_ptr((void *)monitor_data));
 			dict_unref(priv->metrics);
