@@ -35,7 +35,7 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <sys/time.h>
+
 
 /* return the difference of begin and end by second*/
 double time_difference(struct timeval *begin, struct timeval *end)
@@ -45,16 +45,6 @@ double time_difference(struct timeval *begin, struct timeval *end)
 		return duration;
 	duration = (end->tv_sec - begin->tv_sec) + ((end->tv_usec - begin->tv_usec) / 1000000);
 	return duration;
-}
-
-
-void sleep_us(unsigned int nusecs)
-{
-    struct timeval	tval;
- 
-    tval.tv_sec = nusecs / 1000000;
-    tval.tv_usec = nusecs % 1000000;
-    select(0, NULL, NULL, NULL, &tval);
 }
 
 /* return the index of n-th pos that f appears in str*/
@@ -88,7 +78,7 @@ int find_str_n(char *str, char *f, int n)
 void get_client_id(char *client, char *client_id)
 {
     int len = find_str_n(client, DELIMER, TIMES);
-	// 未找到
+
 	if (len == -1) {
 		strncpy(client_id, client, strlen(client));
 	} else {
@@ -97,14 +87,11 @@ void get_client_id(char *client, char *client_id)
 	}
 }
 
-/* hiredis 相关函数*/
-// 事件分发线程函数
 void *event_proc(void *pthis)
 {
     CRedisPublisher *p = (CRedisPublisher *)pthis;
     sem_wait(&p->_event_sem);
 
-	// 开启事件分发，event_base_dispatch会阻塞
     event_base_dispatch(p->_event_base);
 
     return NULL;
@@ -226,14 +213,13 @@ int redis_connect(void *pthis)
     {
 		gf_log("monitor", GF_LOG_ERROR,
                "Connect redis error: %d, %s\n",
-            p->_redis_context->err, p->_redis_context->errstr);    // 输出错误信息
-        return 0;
+            p->_redis_context->err, p->_redis_context->errstr);    
     }
 
     // attach the event
-    redisLibeventAttach(p->_redis_context, p->_event_base);    // 将事件绑定到redis context上，使设置给redis的回调跟事件关联
+    redisLibeventAttach(p->_redis_context, p->_event_base);    
+	
 
-    // 创建事件处理线程
     int ret = pthread_create(&p->_event_thread, NULL, event_thread, (void *)p);
     if (ret != 0)
     {
@@ -351,7 +337,7 @@ void *_qos_monitor_thread(xlator_t *this)
 			sprintf(message, "%s^^%ld^^%s^^%d", server_ip, now.tv_sec, "invoke_times", times);
 			gf_log("monitor", GF_LOG_ERROR, "[%s]: %s", priv->publisher->channel, message);
 			publish(priv->publisher->channel, message, priv->publisher);
-			sleep_us(1);
+			usleep(1);
 			++times;
 		}
         
