@@ -51,6 +51,16 @@ double time_difference(struct timeval *begin, struct timeval *end)
 	return duration;
 }
 
+double time_difference_ms(struct timeval *begin, struct timeval *end)
+{
+	double duration = 0;
+	if (begin == NULL || end == NULL)
+		return duration;
+	duration = (end->tv_sec - begin->tv_sec) * 1000 + ((end->tv_usec - begin->tv_usec) / 1000);
+	return duration;
+}
+
+
 /* return the index of n-th pos that f appears in str*/
 int find_str_n(char *str, char *f, int n)
 {
@@ -332,6 +342,7 @@ void func(dict_t *this, char *key, data_t *value, void *data)
 	
 	priv = (qos_monitor_private_t *)data;
 	monitor_data = (struct qos_monitor_data *)data_to_ptr(value);
+	
 	gettimeofday(&now, NULL);
 	get_client_id(key, client); 
 	get_server_ip(server_ip);
@@ -388,11 +399,18 @@ void * _qos_monitor_thread(xlator_t *this)
 		/* publish monitor metrics */
 		gf_log(this->name, GF_LOG_INFO, "--- qos monitor publisher ---");
 		dict_foreach(metrics, func, priv);
+		if (metrics != NULL) {
+			dict_destroy(metrics);
+			metrics = NULL;
+		}
+		
 	}
-	if (metrics != NULL)
-		dict_destroy(metrics);
+
 	priv->monitor_thread_running = 0;
 	gf_log(this->name, GF_LOG_ERROR, "QoS_monitor monitor thread terminated");
+	if (metrics != NULL)
+		dict_destroy(metrics);
+	
     return NULL;
 }
 
@@ -493,8 +511,8 @@ qos_monitor_writev_cbk (call_frame_t *frame,
 				begin = monitor_data->write_delay.wind_at;
 				end = monitor_data->write_delay.unwind_at;
 				duration = (time_difference(&begin, &end) != 0 ? time_difference(&begin, &end) : 1);
-				monitor_data->data_written = (monitor_data->data_written + op_ret / duration) / 2;
-				monitor_data->write_delay.value = (monitor_data->write_delay.value + time_difference(&begin, &end)) / 2;
+				monitor_data->data_written = (monitor_data->data_written + op_ret / KB / duration) / 2;
+				monitor_data->write_delay.value = (monitor_data->write_delay.value + time_difference_ms(&begin, &end)) / 2;
 				gf_log("sh", GF_LOG_ERROR, "value = %lf", monitor_data->write_delay.value);
 			}
 			
