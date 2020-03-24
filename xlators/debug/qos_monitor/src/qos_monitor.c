@@ -372,7 +372,7 @@ void * _qos_monitor_thread(xlator_t *this)
 {
 	qos_monitor_private_t *priv = NULL;
 	int old_cancel_type;
-	dict_t *metrics = NULL;
+	//dict_t *metrics = NULL;
 	
 	priv = this->private;
 	gf_log(this->name, GF_LOG_INFO,
@@ -390,29 +390,29 @@ void * _qos_monitor_thread(xlator_t *this)
 		sleep(priv->qos_monitor_interval);
         (void)pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, &old_cancel_type);
 		
-		LOCK(&priv->lock);
+		/*LOCK(&priv->lock);
 		{
 			gf_log(this->name, GF_LOG_INFO, "copy");
 			metrics = dict_copy(priv->metrics, metrics);
 			//qos_monitor_data_clear(priv->metrics);
 			publish(priv->publisher->channel, "hello", priv->publisher);
 		}
-		UNLOCK(&priv->lock);
+		UNLOCK(&priv->lock);*/
 		
 		/* publish monitor metrics */
 		gf_log(this->name, GF_LOG_INFO, "--- qos monitor publisher ---");
-		dict_foreach(metrics, func, priv);
-		if (metrics != NULL) {
+		dict_foreach(priv->metrics, func, priv);
+		/*if (metrics != NULL) {
 			dict_destroy(metrics);
 			metrics = NULL;
-		}
+		}*/
 		
 	}
 
 	priv->monitor_thread_running = 0;
 	gf_log(this->name, GF_LOG_INFO, "QoS_monitor monitor thread terminated");
-	if (metrics != NULL)
-		dict_destroy(metrics);
+	/*if (metrics != NULL)
+		dict_destroy(metrics);*/
 	
     return NULL;
 }
