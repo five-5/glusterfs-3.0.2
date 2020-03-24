@@ -308,7 +308,7 @@ void *_qos_monitor_thread(xlator_t *this)
 {
 	qos_monitor_private_t *priv = NULL;
 	int old_cancel_type;
-	char message[120];
+	char message[200];
 	struct timeval now;
     char server_ip[16];
     int times = 1;
@@ -337,7 +337,6 @@ void *_qos_monitor_thread(xlator_t *this)
 
 		for (i = 0; i < 5; ++i) {
 			sprintf(message, "%s^^%ld^^%s^^%d", server_ip, now.tv_sec, "invoke_times", times);
-			gf_log("monitor", GF_LOG_ERROR, "[%s]: %s", priv->publisher->channel, message);
 			publish(priv->publisher->channel, message, priv->publisher);
 			
 			++times;
