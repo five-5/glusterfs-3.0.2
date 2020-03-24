@@ -539,7 +539,9 @@ qos_monitor_writev (call_frame_t *frame,
 
 		LOCK(priv->lock);
 		if (priv->metrics != NULL) {
+			gf_log("sh", GF_LOG_ERROR, "priv->metrics != NULL.");
 			dict_ref(priv->metrics);
+			gf_log("sh", GF_LOG_ERROR, "dict_get_ptr.");
 			ret = dict_get_ptr(priv->metrics, client->id, (void **)&monitor_data);
 		
 			if (ret != 0) {
