@@ -388,7 +388,7 @@ void * _qos_monitor_thread(xlator_t *this)
 		LOCK(&priv->lock);
 		{
 			gf_log(this->name, GF_LOG_ERROR, "copy");
-			metrics = dict_copy_with_ref(priv->metrics, metrics);
+			metrics = dict_copy(priv->metrics, metrics);
 			qos_monitor_data_clear(priv->metrics);
 		}
 		UNLOCK(&priv->lock);
@@ -396,7 +396,6 @@ void * _qos_monitor_thread(xlator_t *this)
 		/* publish monitor metrics */
 		gf_log(this->name, GF_LOG_INFO, "--- qos monitor publisher ---");
 		dict_foreach(metrics, func, priv);
-		dict_destroy(metrics);
 	}
 	if (metrics != NULL)
 		dict_destroy(metrics);
