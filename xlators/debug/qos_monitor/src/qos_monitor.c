@@ -535,9 +535,11 @@ qos_monitor_writev (call_frame_t *frame,
 		
 		gf_log("sh", GF_LOG_ERROR, "enter qos_monitor_writev.");
         priv = this->private;
+		gf_log("sh", GF_LOG_ERROR, "client");
 		client = (client_id_t*) frame->root->trans;
 
 		LOCK(priv->lock);
+		gf_log("sh", GF_LOG_ERROR, "lock");
 		if (priv->metrics != NULL) {
 			gf_log("sh", GF_LOG_ERROR, "priv->metrics != NULL.");
 			dict_ref(priv->metrics);
@@ -566,6 +568,7 @@ qos_monitor_writev (call_frame_t *frame,
 			gf_log("sh", GF_LOG_ERROR, "priv->metrics == NULL.");
 		}
 		UNLOCK(priv->lock);
+		gf_log("sh", GF_LOG_ERROR, "unlock");
 		
         gf_log("sh", GF_LOG_ERROR, "start wind.");
         STACK_WIND (frame,
