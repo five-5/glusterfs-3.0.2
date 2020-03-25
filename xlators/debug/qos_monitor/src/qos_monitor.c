@@ -129,10 +129,14 @@ void *event_thread(void *data)
 void pubCallback(redisAsyncContext *c, void *r, void *priv) 
 {
     redisReply *reply = (redisReply *)r;
+	struct 
+		now;
     if (reply == NULL) return;
+	gettimeofday(&now, NULL);
 	gf_log("monitor", GF_LOG_ERROR,
-               "[pub_cbk] %s: %d\n", (char*)priv, reply->integer);
+               "[pub_cbk] %ld\n", now.tv_sec*1000000+now.tv_usec);
 } 
+
  
 void connectCallback(const redisAsyncContext *c, int status) 
 {
