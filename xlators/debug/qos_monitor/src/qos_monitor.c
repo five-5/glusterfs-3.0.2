@@ -332,7 +332,7 @@ void get_server_ip(char *result)
 void func(dict_t *this, char *key, data_t *value, void *data)
 {
 	gf_log("monitor", GF_LOG_INFO, "enter func");
-	char message[120];
+	char message[MSGLEN];
 	qos_monitor_private_t *priv = NULL;
 	struct qos_monitor_data *monitor_data = NULL;
 	struct timeval now;
