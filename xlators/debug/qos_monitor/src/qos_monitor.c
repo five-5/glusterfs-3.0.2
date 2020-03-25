@@ -228,16 +228,16 @@ void func(dict_t *this, char *key, data_t *value, void *data)
 	if (duration == 0)
 		duration = 1;
 
-	sprintf(message, "%s%s%s%s%ld%s%s%s%lf%s%s%s%lf%s%s%s%lf%s%s%s%lf%s%s%s%lf", server_ip, DELIMER, client, DELIMER, now.tv_sec, DELIMER
+	sprintf(message, "%s%s%s%s%ld%s%s%s%.2lf%s%s%s%.2lf%s%s%s%.2lf%s%s%s%.2lf%s%s%s%.2lf", server_ip, DELIMER, client, DELIMER, now.tv_sec, DELIMER
 					, "app_wbw", DELIMER, monitor_data->data_written, DELIMER
 					, "app_rbw", DELIMER, monitor_data->data_read, DELIMER
 					, "app_r_delay", DELIMER, monitor_data->read_delay.value, DELIMER
 					, "app_w_delay", DELIMER, monitor_data->write_delay.value, DELIMER
 					, "app_diops", DELIMER, monitor_data->data_iops / duration);
 
-	ret = publish(priv->publisher->channel, message, priv->publisher);
+	/*ret = publish(priv->publisher->channel, message, priv->publisher);
 	if (ret == 0)
-		gf_log("sh", GF_LOG_ERROR, "publish failed.");
+		gf_log("sh", GF_LOG_ERROR, "publish failed.");*/
 	monitor_data->started_at = now;
 
 }
