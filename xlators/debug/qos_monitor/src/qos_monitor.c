@@ -754,7 +754,7 @@ init (xlator_t *this)
 		int ret = -1;
 		char *redis_host;
 		char *publish_channel;
-		int32_t redis_port;
+		int32_t redis_port, redis_publish_interval;
 
         if (!this)
                 return -1;
@@ -787,7 +787,10 @@ init (xlator_t *this)
 		redis_port = data_to_int32 (dict_get (options, "redis-port"));
 		if (redis_port == -1)
 			redis_port = PORT;
-
+		redis_publish_interval = data_to_int32 (dict_get (options, "redis-publish-interval"));
+		if (redis_publish_interval == -1)
+			redis_publish_interval = REDIS_INTERVAL;
+		REDIS_INTERVAL = redis_publish_interval;
         LOCK_INIT (&priv->lock);
 		
 		if (interval != 0)
@@ -913,6 +916,9 @@ struct volume_options options[] = {
           .type = GF_OPTION_TYPE_STR,
         },
 		{ .key  = {"redis-port", "port"},
+          .type = GF_OPTION_TYPE_INT,
+        },
+        { .key  = {"redis-publish-interval", "publish-interval"},
           .type = GF_OPTION_TYPE_INT,
         },
         { .key  = {NULL} },

@@ -33,9 +33,9 @@
 #define TIMES 3
 #define KB 1024
 #define MB 1024*1024
-#define REDIS_INTERVAL 100
 #define MSGLEN 150
 
+int32_t REDIS_INTERVAL = 1000;
 /* changed from struct _server_connection
 * used for identity client
  */
