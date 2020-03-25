@@ -30,6 +30,7 @@
 #define TIMES 3
 #define KB 1024
 #define MB 1024*1024
+#define MSG_LENTH 300
 
 /* changed from struct _server_connection
 * used for identity client
