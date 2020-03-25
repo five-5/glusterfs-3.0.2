@@ -129,8 +129,7 @@ void *event_thread(void *data)
 void pubCallback(redisAsyncContext *c, void *r, void *priv) 
 {
     redisReply *reply = (redisReply *)r;
-	struct 
-		now;
+	struct timeval now;
     if (reply == NULL) return;
 	gettimeofday(&now, NULL);
 	gf_log("monitor", GF_LOG_ERROR,
