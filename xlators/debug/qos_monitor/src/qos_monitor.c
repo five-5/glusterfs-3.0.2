@@ -239,7 +239,7 @@ void func(dict_t *this, char *key, data_t *value, void *data)
 	if (ret == 0)
 		gf_log("sh", GF_LOG_ERROR, "publish failed.");
 	monitor_data->started_at = now;
-	FREE(message);
+
 }
 
 void * _qos_monitor_thread(xlator_t *this)
