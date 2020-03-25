@@ -216,6 +216,7 @@ void func(dict_t *this, char *key, data_t *value, void *data)
 	char server_ip[16];
 	double duration = 0;
 	int ret = 0;
+	int lenth = 0;
 	
 	priv = (qos_monitor_private_t *)data;
 	monitor_data = (struct qos_monitor_data *)data_to_ptr(value);
@@ -227,18 +228,24 @@ void func(dict_t *this, char *key, data_t *value, void *data)
 	duration = time_difference(&monitor_data->started_at ,&now);
 	if (duration == 0)
 		duration = 1;
-	
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf^^%s^^%lf^^%s^^%lf^^%s^^%lf^^%s^^%lf", server_ip, client, now.tv_sec
-					, "app_wbw", monitor_data->data_written
-					, "app_rbw", monitor_data->data_read
-					, "app_r_delay", monitor_data->read_delay.value
-					, "app_w_delay", monitor_data->write_delay.value
-					, "app_diops", monitor_data->data_iops / duration);
+
+	lenth = sizeof(server_ip) + sizeof(client) + sizeof(now.tv_sec) + sizeof(monitor_data->data_iops)
+			+ sizeof(monitor_data->data_written) + sizeof(monitor_data->data_read)
+			+ sizeof(monitor_data->read_delay.value) + sizeof(monitor_data->write_delay.value);
+	message = (char *)CALLOC(1, lenth);
+	ERR_ABORT(message);
+	sprintf(message, "%s%s%s%s%ld%s%s%s%lf%s%s%s%lf%s%s%s%lf%s%s%s%lf%s%s%s%lf", server_ip, DELIMER, client, DELIMER, now.tv_sec, DELIMER
+					, "app_wbw", DELIMER, monitor_data->data_written, DELIMER
+					, "app_rbw", DELIMER, monitor_data->data_read, DELIMER
+					, "app_r_delay", DELIMER, monitor_data->read_delay.value, DELIMER
+					, "app_w_delay", DELIMER, monitor_data->write_delay.value, DELIMER
+					, "app_diops", DELIMER, monitor_data->data_iops / duration);
 
 	ret = publish(priv->publisher->channel, message, priv->publisher);
 	if (ret == 0)
 		gf_log("sh", GF_LOG_ERROR, "publish failed.");
 	monitor_data->started_at = now;
+	FREE(message);
 }
 
 void * _qos_monitor_thread(xlator_t *this)
@@ -269,7 +276,7 @@ void * _qos_monitor_thread(xlator_t *this)
 		get_server_ip(server_ip);
 		sprintf(message, "%s%s%d", server_ip, DELIMER, times++);
 		publish(priv->publisher->channel, message, priv->publisher);
-		// dict_foreach(priv->metrics, func, priv);
+		dict_foreach(priv->metrics, func, priv);
 		
 	}
 
