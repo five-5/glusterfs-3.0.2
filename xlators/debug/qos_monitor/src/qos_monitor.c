@@ -150,13 +150,10 @@ int publish(const char *channel_name, const char *message, void *pthis)
                "Publish command failed[%d]: %s\n", p->_redis_context->err, p->_redis_context->errstr);
         return 0;
     } else {
-		if (reply->type == REDIS_REPLY_ERROR) {
-			gf_log("sh", GF_LOG_ERROR,
-               "Publish command failed: %s\n",reply->error);
-		} else {
-			gf_log("sh", GF_LOG_INFO,
-               "publish %s %s\n", channel_name, message);
-		}
+	
+		gf_log("sh", GF_LOG_INFO,
+           "publish %s %s\n", channel_name, message);
+		
 		freeReplyObject(reply);
         return 1;
     }
@@ -234,7 +231,7 @@ void func(dict_t *this, char *key, data_t *value, void *data)
 					, "app_diops", monitor_data->data_iops / duration);
 
 	ret = publish(priv->publisher->channel, message, priv->publisher);
-	if (ret)
+	if (ret == 0)
 		gf_log("sh", GF_LOG_ERROR, "publish failed.");
 	monitor_data->started_at = now;
 }
