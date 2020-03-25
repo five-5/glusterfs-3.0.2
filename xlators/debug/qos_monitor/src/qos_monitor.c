@@ -144,7 +144,12 @@ int publish(const char *channel_name, const char *message, void *pthis)
     reply = redisCommand(p->_redis_context,
         "PUBLISH %s %s",
         channel_name, message);
-    if (reply == NULL)
+	
+	freeReplyObject(reply);
+	gf_log("sh", GF_LOG_INFO,
+           "publish %s %s\n", channel_name, message);
+	return 1;
+   /* if (reply == NULL)
     {
         gf_log("sh", GF_LOG_ERROR,
                "Publish command failed[%d]: %s\n", p->_redis_context->err, p->_redis_context->errstr);
@@ -156,7 +161,7 @@ int publish(const char *channel_name, const char *message, void *pthis)
 		
 		freeReplyObject(reply);
         return 1;
-    }
+    }*/
 	
 }
 
