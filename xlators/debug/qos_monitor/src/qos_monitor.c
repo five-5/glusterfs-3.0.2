@@ -259,12 +259,11 @@ int publish(const char *channel_name, const char *message, void *pthis)
 }
 
 
-char * get_server_ip()
+void get_server_ip(char *result)
 {
 	struct ifaddrs *ifAddrStruct = NULL;
     struct ifaddrs *ifa = NULL;
     void *tmpAddrPtr = NULL;
-	char result[16] = "";
 
     getifaddrs(&ifAddrStruct);
 
@@ -298,7 +297,6 @@ char * get_server_ip()
 		freeifaddrs(ifAddrStruct);
 	}
 
-	return result;
 }
 
 
@@ -308,7 +306,7 @@ void *_qos_monitor_thread(xlator_t *this)
 	int old_cancel_type;
 	char message[120];
 	struct timeval now;
-    char *server_ip;
+    char server_ip[16];
     int times = 1;
 	int i = 0;
 
@@ -331,7 +329,7 @@ void *_qos_monitor_thread(xlator_t *this)
 		/* publish monitor metrics */
  
         gettimeofday(&now, NULL);
-        server_ip = get_server_ip();
+        get_server_ip(server_ip);
 
 		for (i = 0; i < 5; ++i) {
 			sprintf(message, "%s^^%ld^^%s^^%d", server_ip, now.tv_sec, "invoke_times", times);
