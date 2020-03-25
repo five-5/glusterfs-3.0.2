@@ -249,7 +249,6 @@ void * _qos_monitor_thread(xlator_t *this)
            priv->qos_monitor_interval);
 
 	while (1) {
-		// gf_log(this->name, GF_LOG_ERROR, "qos_monitor: thread should_die: %d", priv->monitor_thread_should_die);
 		if (priv->monitor_thread_should_die)
 			break;
 
@@ -258,22 +257,9 @@ void * _qos_monitor_thread(xlator_t *this)
 		sleep(priv->qos_monitor_interval);
         (void)pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, &old_cancel_type);
 		
-		/*LOCK(&priv->lock);
-		{
-			gf_log(this->name, GF_LOG_INFO, "copy");
-			metrics = dict_copy(priv->metrics, metrics);
-			//qos_monitor_data_clear(priv->metrics);
-			publish(priv->publisher->channel, "hello", priv->publisher);
-		}
-		UNLOCK(&priv->lock);*/
-		
 		/* publish monitor metrics */
 		gf_log(this->name, GF_LOG_INFO, "--- qos monitor publisher ---");
 		dict_foreach(priv->metrics, func, priv);
-		/*if (metrics != NULL) {
-			dict_destroy(metrics);
-			metrics = NULL;
-		}*/
 		
 	}
 
@@ -607,7 +593,6 @@ int32_t
 init (xlator_t *this)
 {
         dict_t *options = NULL;
-        char *includes = NULL, *excludes = NULL;
         qos_monitor_private_t *priv = NULL;
 		int32_t interval;
 		int ret = -1;
@@ -656,7 +641,7 @@ init (xlator_t *this)
 		
 		// redis相关数据结构初始化
 		if (redis_host) {
-			priv->publisher->redis_host = CALLOC (1, sizeof(redis_host));
+			priv->publisher->redis_host = CALLOC (1, sizeof(*redis_host));
 			ERR_ABORT(priv->publisher->redis_host);
 			strcpy(priv->publisher->redis_host, redis_host);
 		} else {
@@ -666,7 +651,7 @@ init (xlator_t *this)
 		}
 		
 		if (publish_channel) {
-			priv->publisher->channel = CALLOC (1, sizeof(publish_channel));
+			priv->publisher->channel = CALLOC (1, sizeof(*publish_channel));
 			ERR_ABORT(priv->publisher->channel);
 			strcpy(priv->publisher->channel, publish_channel);
 		} else {
