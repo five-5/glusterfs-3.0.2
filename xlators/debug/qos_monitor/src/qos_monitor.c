@@ -349,26 +349,26 @@ void func(dict_t *this, char *key, data_t *value, void *data)
 	
 	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_wbw", monitor_data->data_written);
 	publish(priv->publisher->channel, message, priv->publisher);
-	usleep(1);
+	usleep(REDIS_INTERVAL);
 
 	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_rbw", monitor_data->data_read);
 	publish(priv->publisher->channel, message, priv->publisher);
-	usleep(1);
+	usleep(REDIS_INTERVAL);
 
 	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_r_delay", monitor_data->read_delay.value);
 	publish(priv->publisher->channel, message, priv->publisher);
-	usleep(1);
+	usleep(REDIS_INTERVAL);
 
 	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_w_delay", monitor_data->write_delay.value);
 	publish(priv->publisher->channel, message, priv->publisher);
-	usleep(1);
+	usleep(REDIS_INTERVAL);
 
 	duration = time_difference(&monitor_data->started_at ,&now);
 	if (duration == 0)
 		duration = 1;
 	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_diops", monitor_data->data_iops / duration);
 	publish(priv->publisher->channel, message, priv->publisher);
-	usleep(1);
+	usleep(REDIS_INTERVAL);
 	
 	monitor_data->started_at = now;
 }

@@ -33,6 +33,7 @@
 #define TIMES 3
 #define KB 1024
 #define MB 1024*1024
+#define REDIS_INTERVAL 5
 
 /* changed from struct _server_connection
 * used for identity client
