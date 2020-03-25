@@ -24,7 +24,12 @@
 
 /**
  * xlators/debug/qos_monitor :
- *    test for publish
+ *    This translator monitor following metrics and publish to redis chanenl per interval:
+ *    a) app_rbw: throughput of read operation - interval - per clien_id 
+ *    b) app_wbw: throughput of writev operation - interval - per clien_id 
+ *    c) app_r_delay: times of read operation - interval - per clien_id 
+ *    d) app_w_delay: times of writev operation - interval - per clien_id 
+ *    e) app_diops: times of io operation - interval - per clien_id
  */
 
 #include "qos_monitor.h"
@@ -36,7 +41,6 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-
 /* return the difference of begin and end by second*/
 double time_difference(struct timeval *begin, struct timeval *end)
 {
@@ -46,6 +50,16 @@ double time_difference(struct timeval *begin, struct timeval *end)
 	duration = (end->tv_sec - begin->tv_sec) + ((end->tv_usec - begin->tv_usec) / 1000000);
 	return duration;
 }
+
+double time_difference_ms(struct timeval *begin, struct timeval *end)
+{
+	double duration = 0;
+	if (begin == NULL || end == NULL)
+		return duration;
+	duration = (end->tv_sec - begin->tv_sec) * 1000 + ((end->tv_usec - begin->tv_usec) / 1000);
+	return duration;
+}
+
 
 /* return the index of n-th pos that f appears in str*/
 int find_str_n(char *str, char *f, int n)
@@ -72,26 +86,29 @@ int find_str_n(char *str, char *f, int n)
         return len - strlen(tmp);
 }
 
-/* according to current client_id_t info to get client_id
+/* according to current client_id_t info to get client_id 
  * TODO: maybe should modify with the map relation with client and application
 */
 void get_client_id(char *client, char *client_id)
 {
     int len = find_str_n(client, DELIMER, TIMES);
-
+	// æœªæ‰¾åˆ°
 	if (len == -1) {
 		strncpy(client_id, client, strlen(client));
 	} else {
 		strncpy(client_id, client, len);
 		client_id[len] = '\0';
-	}
+	}  
 }
 
+/* hiredis ç›¸å…³å‡½æ•°*/
+// äº‹ä»¶åˆ†å‘çº¿ç¨‹å‡½æ•°
 void *event_proc(void *pthis)
 {
     CRedisPublisher *p = (CRedisPublisher *)pthis;
     sem_wait(&p->_event_sem);
 
+	// å¼€å¯äº‹ä»¶åˆ†å‘ï¼Œevent_base_dispatchä¼šé˜»å¡ž
     event_base_dispatch(p->_event_base);
 
     return NULL;
@@ -109,15 +126,15 @@ void *event_thread(void *data)
     return event_proc(data);
 }
 
-void pubCallback(redisAsyncContext *c, void *r, void *priv)
+void pubCallback(redisAsyncContext *c, void *r, void *priv) 
 {
     redisReply *reply = (redisReply *)r;
     if (reply == NULL) return;
 	gf_log("monitor", GF_LOG_ERROR,
                "[pub_cbk] %s: %d\n", (char*)priv, reply->integer);
-}
-
-void connectCallback(const redisAsyncContext *c, int status)
+} 
+ 
+void connectCallback(const redisAsyncContext *c, int status) 
 {
     if (status != REDIS_OK) {
 		gf_log("monitor", GF_LOG_ERROR,
@@ -127,8 +144,8 @@ void connectCallback(const redisAsyncContext *c, int status)
 	gf_log("monitor", GF_LOG_ERROR,
                "Connected...\n");
 }
-
-void disconnectCallback(const redisAsyncContext *c, int status)
+ 
+void disconnectCallback(const redisAsyncContext *c, int status) 
 {
     if (status != REDIS_OK) {
 		gf_log("monitor", GF_LOG_ERROR,
@@ -145,7 +162,7 @@ int redis_init(void *pthis)
 {
     CRedisPublisher *p = (CRedisPublisher *)pthis;
     // initialize the event
-    p->_event_base = event_base_new();
+    p->_event_base = event_base_new();    
     if (NULL == p->_event_base)
     {
 		gf_log("monitor", GF_LOG_ERROR,
@@ -172,7 +189,7 @@ int redis_uninit(void *pthis)
     p->_event_base = NULL;
 
     sem_destroy(&p->_event_sem);
-
+	
 	if (p->redis_host != NULL) {
 		FREE(p->redis_host);
 		p->redis_host = NULL;
@@ -181,7 +198,7 @@ int redis_uninit(void *pthis)
 		FREE(p->channel);
 		p->channel = NULL;
 	}
-
+		
     return 1;
 }
 
@@ -201,7 +218,7 @@ int redis_connect(void *pthis)
 {
     CRedisPublisher *p = (CRedisPublisher *)pthis;
     // connect redis
-    p->_redis_context = redisAsyncConnect(p->redis_host, p->redis_port);    // Òì²½Á¬½Óµ½redis·þÎñÆ÷ÉÏ£¬Ê¹ÓÃÄ¬ÈÏ¶Ë¿Ú
+    p->_redis_context = redisAsyncConnect(p->redis_host, p->redis_port);    // å¼‚æ­¥è¿žæŽ¥åˆ°redisæœåŠ¡å™¨ä¸Šï¼Œä½¿ç”¨é»˜è®¤ç«¯å£
     if (NULL == p->_redis_context)
     {
 		gf_log("monitor", GF_LOG_ERROR,
@@ -213,13 +230,14 @@ int redis_connect(void *pthis)
     {
 		gf_log("monitor", GF_LOG_ERROR,
                "Connect redis error: %d, %s\n",
-            p->_redis_context->err, p->_redis_context->errstr);    
+            p->_redis_context->err, p->_redis_context->errstr);    // è¾“å‡ºé”™è¯¯ä¿¡æ¯
+        return 0;
     }
 
     // attach the event
-    redisLibeventAttach(p->_redis_context, p->_event_base);    
-	
+    redisLibeventAttach(p->_redis_context, p->_event_base);    // å°†äº‹ä»¶ç»‘å®šåˆ°redis contextä¸Šï¼Œä½¿è®¾ç½®ç»™redisçš„å›žè°ƒè·Ÿäº‹ä»¶å…³è”
 
+    // åˆ›å»ºäº‹ä»¶å¤„ç†çº¿ç¨‹
     int ret = pthread_create(&p->_event_thread, NULL, event_thread, (void *)p);
     if (ret != 0)
     {
@@ -229,13 +247,13 @@ int redis_connect(void *pthis)
         return 0;
     }
 
-	// ÉèÖÃÁ¬½Ó»Øµ÷£¬µ±Òì²½µ÷ÓÃÁ¬½Óºó£¬·þÎñÆ÷´¦ÀíÁ¬½ÓÇëÇó½áÊøºóµ÷ÓÃ£¬Í¨Öªµ÷ÓÃÕßÁ¬½ÓµÄ×´Ì¬
+	// è®¾ç½®è¿žæŽ¥å›žè°ƒï¼Œå½“å¼‚æ­¥è°ƒç”¨è¿žæŽ¥åŽï¼ŒæœåŠ¡å™¨å¤„ç†è¿žæŽ¥è¯·æ±‚ç»“æŸåŽè°ƒç”¨ï¼Œé€šçŸ¥è°ƒç”¨è€…è¿žæŽ¥çš„çŠ¶æ€
     redisAsyncSetConnectCallback(p->_redis_context, &connectCallback);
 
-	// ÉèÖÃ¶Ï¿ªÁ¬½Ó»Øµ÷£¬µ±·þÎñÆ÷¶Ï¿ªÁ¬½Óºó£¬Í¨Öªµ÷ÓÃÕßÁ¬½Ó¶Ï¿ª£¬µ÷ÓÃÕß¿ÉÒÔÀûÓÃÕâ¸öº¯ÊýÊµÏÖÖØÁ¬
+	// è®¾ç½®æ–­å¼€è¿žæŽ¥å›žè°ƒï¼Œå½“æœåŠ¡å™¨æ–­å¼€è¿žæŽ¥åŽï¼Œé€šçŸ¥è°ƒç”¨è€…è¿žæŽ¥æ–­å¼€ï¼Œè°ƒç”¨è€…å¯ä»¥åˆ©ç”¨è¿™ä¸ªå‡½æ•°å®žçŽ°é‡è¿ž
     redisAsyncSetDisconnectCallback(p->_redis_context, &disconnectCallback);
 
-	// Æô¶¯ÊÂ¼þÏß³Ì
+	// å¯åŠ¨äº‹ä»¶çº¿ç¨‹
     sem_post(&p->_event_sem);
     return 1;
 }
@@ -252,21 +270,33 @@ int publish(const char *channel_name, const char *message, void *pthis)
                "Publish command failed: %d\n", ret);
         return 0;
     } else {
-		gf_log("monitor", GF_LOG_ERROR,
+		gf_log("monitor", GF_LOG_INFO,
                "publish %s %s\n", channel_name, message);
         return 1;
     }
 }
 
+static void
+qos_monitor_data_clear(dict_t *metrics)
+{
+	ERR_ABORT (metrics);  
+	gf_log("monitor", GF_LOG_INFO, "enter qos_monitor_data_clear");
+	if (metrics->count > 0)
+	{
+		dict_destroy(metrics);
+		metrics = dict_new();
+	}
+	gf_log("monitor", GF_LOG_INFO, "qos_monitor_data_clear finished.");
+}
 
 void get_server_ip(char *result)
 {
 	struct ifaddrs *ifAddrStruct = NULL;
     struct ifaddrs *ifa = NULL;
     void *tmpAddrPtr = NULL;
-
+	
     getifaddrs(&ifAddrStruct);
-
+ 
     for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next)
 	{
         if (!ifa->ifa_addr)
@@ -278,12 +308,12 @@ void get_server_ip(char *result)
             tmpAddrPtr=&((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
             char addressBuffer[INET_ADDRSTRLEN];
             inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
-			if (strcmp(addressBuffer, "127.0.0.1") && !strstr(addressBuffer, "10.")
+			if (strcmp(addressBuffer, "127.0.0.1") && !strstr(addressBuffer, "10.") 
 				  &&  !strstr(addressBuffer, "172.") && !strstr(addressBuffer, "192.")) {
 					  strcpy(result, addressBuffer);
 					  break;
 				  }
-
+				
         }
 		else if (ifa->ifa_addr->sa_family == AF_INET6) // check it is IP6
 		{
@@ -296,22 +326,61 @@ void get_server_ip(char *result)
 	{
 		freeifaddrs(ifAddrStruct);
 	}
-
 }
 
+// TODOï¼šå¾…ä¼˜åŒ–å‘é€å†™æ³•ä»¥åŠæŒ‡æ ‡èŽ·å–å†™æ³•ï¼šåˆæ­¥æƒ³æ³•ç”¨æ•°ç»„å’Œä¸‹æ ‡+æžšä¸¾ç±»åž‹å¯¹åº”
+void func(dict_t *this, char *key, data_t *value, void *data)
+{
+	gf_log("monitor", GF_LOG_INFO, "enter func");
+	char message[120];
+	qos_monitor_private_t *priv = NULL;
+	struct qos_monitor_data *monitor_data = NULL;
+	struct timeval now;
+	char client[CLIENTID];
+	char server_ip[16];
+	double duration = 0;
+	
+	priv = (qos_monitor_private_t *)data;
+	monitor_data = (struct qos_monitor_data *)data_to_ptr(value);
+	
+	gettimeofday(&now, NULL);
+	get_client_id(key, client); 
+	get_server_ip(server_ip);
+	
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_wbw", monitor_data->data_written);
+	publish(priv->publisher->channel, message, priv->publisher);
+	usleep(1);
 
-void *_qos_monitor_thread(xlator_t *this)
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_rbw", monitor_data->data_read);
+	publish(priv->publisher->channel, message, priv->publisher);
+	usleep(1);
+
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_r_delay", monitor_data->read_delay.value);
+	publish(priv->publisher->channel, message, priv->publisher);
+	usleep(1);
+
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_w_delay", monitor_data->write_delay.value);
+	publish(priv->publisher->channel, message, priv->publisher);
+	usleep(1);
+
+	duration = time_difference(&monitor_data->started_at ,&now);
+	if (duration == 0)
+		duration = 1;
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_diops", monitor_data->data_iops / duration);
+	publish(priv->publisher->channel, message, priv->publisher);
+	usleep(1);
+	
+	monitor_data->started_at = now;
+}
+
+void * _qos_monitor_thread(xlator_t *this)
 {
 	qos_monitor_private_t *priv = NULL;
 	int old_cancel_type;
-	char message[120];
-	struct timeval now;
-    char server_ip[16];
-    int times = 1;
-	int i = 0;
-
+	//dict_t *metrics = NULL;
+	
 	priv = this->private;
-	gf_log(this->name, GF_LOG_ERROR,
+	gf_log(this->name, GF_LOG_INFO,
            "qos_monitor monitor thread started, "
            "polling IO stats every %d seconds",
            priv->qos_monitor_interval);
@@ -322,33 +391,40 @@ void *_qos_monitor_thread(xlator_t *this)
 			break;
 
 		(void)pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &old_cancel_type);
-        gf_log(this->name, GF_LOG_ERROR, "sleep....");
+        gf_log(this->name, GF_LOG_INFO, "sleep....");
 		sleep(priv->qos_monitor_interval);
         (void)pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, &old_cancel_type);
-
-		/* publish monitor metrics */
- 
-        gettimeofday(&now, NULL);
-        get_server_ip(server_ip);
-
-		for (i = 0; i < 5; ++i) {
-			sprintf(message, "%s^^%ld^^%s^^%d", server_ip, now.tv_sec, "invoke_times", times);
-			gf_log("monitor", GF_LOG_ERROR, "[%s]: %s", priv->publisher->channel, message);
-			publish(priv->publisher->channel, message, priv->publisher);
-			usleep(1);
-			++times;
+		
+		/*LOCK(&priv->lock);
+		{
+			gf_log(this->name, GF_LOG_INFO, "copy");
+			metrics = dict_copy(priv->metrics, metrics);
+			//qos_monitor_data_clear(priv->metrics);
+			publish(priv->publisher->channel, "hello", priv->publisher);
 		}
-        
+		UNLOCK(&priv->lock);*/
+		
+		/* publish monitor metrics */
+		gf_log(this->name, GF_LOG_INFO, "--- qos monitor publisher ---");
+		dict_foreach(priv->metrics, func, priv);
+		/*if (metrics != NULL) {
+			dict_destroy(metrics);
+			metrics = NULL;
+		}*/
+		
 	}
 
 	priv->monitor_thread_running = 0;
-	gf_log(this->name, GF_LOG_ERROR, "QoS_monitor monitor thread terminated");
+	gf_log(this->name, GF_LOG_INFO, "QoS_monitor monitor thread terminated");
+	/*if (metrics != NULL)
+		dict_destroy(metrics);*/
+	
     return NULL;
 }
 
 int _qos_destroy_monitor_thread(qos_monitor_private_t *priv)
 {
-	gf_log("q", GF_LOG_ERROR, "qos_destroy_monitor_thread invoked.");
+	gf_log("sh", GF_LOG_INFO, "qos_destroy_monitor_thread invoked.");
     priv->monitor_thread_should_die = 1;
     if (priv->monitor_thread_running) {
         (void)pthread_cancel(priv->monitor_thread);
@@ -361,15 +437,20 @@ void qos_private_destroy(qos_monitor_private_t *priv)
 {
 	if (!priv)
 		return;
-	gf_log("sh", GF_LOG_ERROR, "qos_private_destroy invoked.");
-
+	gf_log("q", GF_LOG_INFO, "qos_private_destroy invoked.");
+	if (priv->metrics)
+	{
+		dict_destroy(priv->metrics);
+		priv->metrics = NULL;
+	}
+	
 	_qos_destroy_monitor_thread(priv);
 	redis_disconnect(priv->publisher);
 	redis_uninit(priv->publisher);
-
+	
 	LOCK_DESTROY (&priv->lock);
 	if (priv->publisher)
-	{
+	{   
 		if (priv->publisher->redis_host)
 		{
 			FREE(priv->publisher->redis_host);
@@ -383,9 +464,26 @@ void qos_private_destroy(qos_monitor_private_t *priv)
 		FREE(priv->publisher);
 		priv->publisher = NULL;
 	}
-
+		
 	FREE (priv);
-	gf_log("sh", GF_LOG_ERROR, "qos_private_destroy finished.");
+	gf_log("q", GF_LOG_INFO, "qos_private_destroy finished.");
+}
+
+
+void  _qos_init_monitor_data(struct qos_monitor_data *monitor_data)
+{
+	monitor_data->data_written = 0.0;
+	monitor_data->data_read = 0.0;
+	monitor_data->data_iops = 0.0;
+	gettimeofday(&monitor_data->started_at, NULL);
+	// TODO: whether it's ok to set this initial.
+	monitor_data->write_delay.wind_at = monitor_data->started_at;
+	monitor_data->write_delay.unwind_at = monitor_data->started_at;
+    monitor_data->write_delay.value = 0.0;
+	monitor_data->read_delay.wind_at = monitor_data->started_at;
+	monitor_data->read_delay.unwind_at = monitor_data->started_at;
+	monitor_data->read_delay.value = 0.0;
+	gf_log("sh", GF_LOG_INFO, "qos_monitor_data inited.");
 }
 
 int32_t
@@ -397,12 +495,46 @@ qos_monitor_writev_cbk (call_frame_t *frame,
                      struct stat *prebuf,
                      struct stat *postbuf)
 {
-		gf_log(this->name, GF_LOG_ERROR,
-						   "start unwind.");
+        qos_monitor_private_t *priv = NULL;
+		client_id_t *client = NULL;
+		struct qos_monitor_data *monitor_data = NULL;
+		struct timeval begin;
+		struct timeval end;
+		double duration;
+		int ret = 0;
 
-        STACK_UNWIND (frame, op_ret, op_errno, prebuf, postbuf);
-		gf_log(this->name, GF_LOG_ERROR,
-                   "end unwind.");
+		gf_log("sh", GF_LOG_INFO, "enter qos_monitor_writev_cbk.");
+        priv = this->private;
+		client = (client_id_t*) frame->root->trans;
+		
+		LOCK(&priv->lock);
+		if (priv->metrics != NULL) {
+			dict_ref(priv->metrics);
+			ret = dict_get_ptr(priv->metrics, client->id, (void **)&monitor_data);
+			gf_log("sh", GF_LOG_INFO, "dict_get_ptr fini.");
+			if (ret != 0) {
+				gf_log("sh", GF_LOG_ERROR, "dict_get_ptr failed.");
+			} else {
+				monitor_data = (struct qos_monitor_data *)monitor_data;	
+				gettimeofday(&monitor_data->write_delay.unwind_at, NULL);
+				begin = monitor_data->write_delay.wind_at;
+				end = monitor_data->write_delay.unwind_at;
+				duration = (time_difference(&begin, &end) != 0 ? time_difference(&begin, &end) : 1);
+				monitor_data->data_written = (monitor_data->data_written + op_ret / KB / duration) / 2;
+				monitor_data->write_delay.value = (monitor_data->write_delay.value + time_difference_ms(&begin, &end)) / 2;
+				gf_log("sh", GF_LOG_INFO, "value = %lf", monitor_data->write_delay.value);
+			}
+			data_unref(data_from_ptr((void*)monitor_data));
+			dict_unref(priv->metrics);			
+			gf_log("sh", GF_LOG_INFO, "qos_monitor_writev_cbk prepared.");
+		} else {
+			gf_log("sh", GF_LOG_ERROR, "priv->metrics == NULL.");
+		}
+		UNLOCK(&priv->lock);
+
+		gf_log("sh", GF_LOG_INFO, "qos_monitor_writev_cbk unwind start.");
+		STACK_UNWIND (frame, op_ret, op_errno, prebuf, postbuf);
+		gf_log("sh", GF_LOG_INFO, "qos_monitor_writev_cbk unwind end.");
         return 0;
 }
 
@@ -415,13 +547,57 @@ qos_monitor_writev (call_frame_t *frame,
                  off_t offset,
                  struct iobref *iobref)
 {
+
+		qos_monitor_private_t *priv = NULL;
 		client_id_t *client = NULL;
-        
+		struct qos_monitor_data *monitor_data = NULL;
+		int ret = 0;
+		int first = 0;
+		
+		gf_log("sh", GF_LOG_INFO, "enter qos_monitor_writev.");
+        priv = this->private;
 		client = (client_id_t*) frame->root->trans;
-        gf_log(this->name, GF_LOG_ERROR,
-                   "client_id = %s.", client->id);
-		gf_log(this->name, GF_LOG_ERROR,
-                   "start wind.");
+
+		LOCK(&priv->lock);
+		gf_log("sh", GF_LOG_INFO, "lock");
+		if (priv->metrics != NULL) {
+			gf_log("sh", GF_LOG_INFO, "priv->metrics != NULL.");
+			dict_ref(priv->metrics);
+
+			gf_log("sh", GF_LOG_INFO, "dict_get_ptr.");
+			ret = dict_get_ptr(priv->metrics, client->id, (void **)&monitor_data);
+			gf_log("sh", GF_LOG_INFO, "dict_get_ptr fini.");
+
+			if (ret != 0) {
+				first = 1;
+				gf_log("sh", GF_LOG_INFO, "monitor_data doesn't exist.");
+				monitor_data = CALLOC (1, sizeof(*monitor_data));
+				ERR_ABORT (monitor_data);  
+				_qos_init_monitor_data(monitor_data);
+				ret = dict_set_ptr(priv->metrics, client->id, (void *)monitor_data);
+				if (ret != 0)
+					gf_log("sh", GF_LOG_ERROR, "dict set failed.");
+			} else {
+				first = 0;
+				gf_log("sh", GF_LOG_INFO, "monitor_data exist.");
+				monitor_data = (struct qos_monitor_data *)monitor_data;	
+			} /* end if monitor_data == NULL */
+
+			gf_log("sh", GF_LOG_INFO, "get write_delay.wind_at.");
+			gettimeofday(&monitor_data->write_delay.wind_at, NULL);
+			monitor_data->data_iops++;
+
+			if (first)
+				data_unref(data_from_ptr((void *)monitor_data));
+			dict_unref(priv->metrics);
+			gf_log("sh", GF_LOG_INFO, "qos_monitor_writev prepared.");
+		} else {
+			gf_log("sh", GF_LOG_ERROR, "priv->metrics == NULL.");
+		}
+		UNLOCK(&priv->lock);
+		gf_log("sh", GF_LOG_INFO, "unlock");
+		
+        gf_log("sh", GF_LOG_INFO, "start wind.");
         STACK_WIND (frame,
                     qos_monitor_writev_cbk,
                     FIRST_CHILD(this),
@@ -431,11 +607,9 @@ qos_monitor_writev (call_frame_t *frame,
                     count,
                     offset,
                     iobref);
-		gf_log(this->name, GF_LOG_ERROR,
-                   "end wind.");
+		gf_log("sh", GF_LOG_INFO, "end wind.");
         return 0;
 }
-
 
 
 int32_t
@@ -464,10 +638,13 @@ init (xlator_t *this)
         }
 
         priv = CALLOC (1, sizeof(*priv));
-        ERR_ABORT (priv);
-
+        ERR_ABORT (priv);  
+		
 		priv->publisher = CALLOC (1, sizeof(*(priv->publisher)));
-        ERR_ABORT (priv->publisher);
+        ERR_ABORT (priv->publisher);  
+
+		priv->metrics = dict_new();
+		ERR_ABORT (priv->metrics);  
 
         options = this->options;
 		interval = data_to_int32 (dict_get (options, "monitor-interval"));
@@ -480,13 +657,13 @@ init (xlator_t *this)
 			redis_port = PORT;
 
         LOCK_INIT (&priv->lock);
-
+		
 		if (interval != 0)
 			priv->qos_monitor_interval = interval;
 		else
 			priv->qos_monitor_interval = 0;
-
-		// redisÏà¹ØÊý¾Ý½á¹¹³õÊ¼»¯
+		
+		// redisç›¸å…³æ•°æ®ç»“æž„åˆå§‹åŒ–
 		if (redis_host) {
 			priv->publisher->redis_host = CALLOC (1, sizeof(redis_host));
 			ERR_ABORT(priv->publisher->redis_host);
@@ -496,7 +673,7 @@ init (xlator_t *this)
 			ERR_ABORT(priv->publisher->redis_host);
 			strcpy(priv->publisher->redis_host, HOST);
 		}
-
+		
 		if (publish_channel) {
 			priv->publisher->channel = CALLOC (1, sizeof(publish_channel));
 			ERR_ABORT(priv->publisher->channel);
@@ -506,36 +683,36 @@ init (xlator_t *this)
 			ERR_ABORT(priv->publisher->channel);
 			strcpy(priv->publisher->channel, CHANNEL);
 		}
-
+		
 		priv->publisher->redis_port = redis_port;
-
-		gf_log (this->name, GF_LOG_WARNING,
-                        "interval = %d, redis-host: %s, publish-channel: %s, redis-port: %d",
+		
+		gf_log (this->name, GF_LOG_INFO,
+                        "interval = %d, redis-host: %s, publish-channel: %s, redis-port: %d", 
 						priv->qos_monitor_interval, priv->publisher->redis_host, priv->publisher->channel, priv->publisher->redis_port);
-
+		
 		ret = redis_init(priv->publisher);
 		if (!ret)
 		{
 			gf_log(this->name, GF_LOG_ERROR,
 				   "Redis publisher init failed.");
 		} else {
-			gf_log(this->name, GF_LOG_ERROR,
+			gf_log(this->name, GF_LOG_INFO,
 				   "Redis publisher inited.");
 		}
-
+		
 		ret = redis_connect(priv->publisher);
 		if (!ret)
 		{
 			gf_log(this->name, GF_LOG_ERROR,
 				   "Redis connect failed.");
 		} else {
-			gf_log(this->name, GF_LOG_ERROR,
+			gf_log(this->name, GF_LOG_INFO,
 					"Redis connected.");
-		}
+		}       
 
         /* Set this translator's inode table pointer to child node's pointer. */
         this->itable = FIRST_CHILD (this)->itable;
-
+        
 		this->private = priv;
 		if (priv->qos_monitor_interval > 0) {
 			priv->monitor_thread_running = 1;
@@ -552,9 +729,9 @@ init (xlator_t *this)
 			}
 		}
 		this->private = priv;
-		gf_log(this->name, GF_LOG_ERROR,
+		gf_log(this->name, GF_LOG_INFO,
            "qos_monitor: thread should_die: %d", ((qos_monitor_private_t *)this->private)->monitor_thread_should_die);
-		gf_log (this->name, GF_LOG_WARNING,
+		gf_log (this->name, GF_LOG_INFO,
                         "hello from qos_monitor.");
 		return ret;
 
@@ -572,8 +749,8 @@ fini (xlator_t *this)
                 return;
 
         priv = this->private;
-
-		qos_private_destroy(priv);
+		
+		qos_private_destroy(priv);  
 
 		this->private = NULL;
         gf_log (this->name, GF_LOG_NORMAL,
@@ -583,7 +760,7 @@ fini (xlator_t *this)
 
 
 struct xlator_fops fops = {
-	.writev = qos_monitor_writev,
+        .writev      = qos_monitor_writev,
 };
 
 struct xlator_mops mops = {
