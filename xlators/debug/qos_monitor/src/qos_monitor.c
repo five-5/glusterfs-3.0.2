@@ -342,6 +342,132 @@ void  _qos_init_monitor_data(struct qos_monitor_data *monitor_data)
 	gf_log("sh", GF_LOG_INFO, "qos_monitor_data inited.");
 }
 
+int32_t
+qos_monitor_writev_cbk (call_frame_t *frame,
+                     void *cookie,
+                     xlator_t *this,
+                     int32_t op_ret,
+                     int32_t op_errno,
+                     struct stat *prebuf,
+                     struct stat *postbuf)
+{
+        qos_monitor_private_t *priv = NULL;
+		client_id_t *client = NULL;
+		struct qos_monitor_data *monitor_data = NULL;
+		struct timeval begin;
+		struct timeval end;
+		double duration;
+		int ret = 0;
+
+		gf_log("sh", GF_LOG_INFO, "enter qos_monitor_writev_cbk.");
+        priv = this->private;
+		client = (client_id_t*) frame->root->trans;
+		
+		LOCK(&priv->lock);
+		if (priv->metrics != NULL) {
+			dict_ref(priv->metrics);
+			ret = dict_get_ptr(priv->metrics, client->id, (void **)&monitor_data);
+			gf_log("sh", GF_LOG_INFO, "dict_get_ptr fini.");
+			if (ret != 0) {
+				gf_log("sh", GF_LOG_ERROR, "dict_get_ptr failed.");
+			} else {
+				monitor_data = (struct qos_monitor_data *)monitor_data;	
+				gettimeofday(&monitor_data->write_delay.unwind_at, NULL);
+				begin = monitor_data->write_delay.wind_at;
+				end = monitor_data->write_delay.unwind_at;
+				duration = (time_difference(&begin, &end) != 0 ? time_difference(&begin, &end) : 1);
+				monitor_data->data_written = (monitor_data->data_written + op_ret / KB / duration) / 2;
+				monitor_data->write_delay.value = (monitor_data->write_delay.value + time_difference_us(&begin, &end)) / 2;
+				gf_log("sh", GF_LOG_INFO, "value = %lf", monitor_data->write_delay.value);
+			}
+			data_unref(data_from_ptr((void*)monitor_data));
+			dict_unref(priv->metrics);			
+			gf_log("sh", GF_LOG_INFO, "qos_monitor_writev_cbk prepared.");
+		} else {
+			gf_log("sh", GF_LOG_ERROR, "priv->metrics == NULL.");
+		}
+		UNLOCK(&priv->lock);
+
+		gf_log("sh", GF_LOG_INFO, "qos_monitor_writev_cbk unwind start.");
+		STACK_UNWIND (frame, op_ret, op_errno, prebuf, postbuf);
+		gf_log("sh", GF_LOG_INFO, "qos_monitor_writev_cbk unwind end.");
+        return 0;
+}
+
+
+int32_t
+qos_monitor_writev (call_frame_t *frame,
+                 xlator_t *this,
+                 fd_t *fd,
+                 struct iovec *vector,
+                 int32_t count,
+                 off_t offset,
+                 struct iobref *iobref)
+{
+
+		qos_monitor_private_t *priv = NULL;
+		client_id_t *client = NULL;
+		struct qos_monitor_data *monitor_data = NULL;
+		int ret = 0;
+		int first = 0;
+		
+		gf_log("sh", GF_LOG_INFO, "enter qos_monitor_writev.");
+        priv = this->private;
+		client = (client_id_t*) frame->root->trans;
+
+		LOCK(&priv->lock);
+		gf_log("sh", GF_LOG_INFO, "lock");
+		if (priv->metrics != NULL) {
+			gf_log("sh", GF_LOG_INFO, "priv->metrics != NULL.");
+			dict_ref(priv->metrics);
+
+			gf_log("sh", GF_LOG_INFO, "dict_get_ptr.");
+			ret = dict_get_ptr(priv->metrics, client->id, (void **)&monitor_data);
+			gf_log("sh", GF_LOG_INFO, "dict_get_ptr fini.");
+
+			if (ret != 0) {
+				first = 1;
+				gf_log("sh", GF_LOG_INFO, "monitor_data doesn't exist.");
+				monitor_data = CALLOC (1, sizeof(*monitor_data));
+				ERR_ABORT (monitor_data);  
+				_qos_init_monitor_data(monitor_data);
+				ret = dict_set_ptr(priv->metrics, client->id, (void *)monitor_data);
+				if (ret != 0)
+					gf_log("sh", GF_LOG_ERROR, "dict set failed.");
+			} else {
+				first = 0;
+				gf_log("sh", GF_LOG_INFO, "monitor_data exist.");
+				monitor_data = (struct qos_monitor_data *)monitor_data;	
+			} /* end if monitor_data == NULL */
+
+			gf_log("sh", GF_LOG_INFO, "get write_delay.wind_at.");
+			gettimeofday(&monitor_data->write_delay.wind_at, NULL);
+			monitor_data->data_iops++;
+
+			if (first)
+				data_unref(data_from_ptr((void *)monitor_data));
+			dict_unref(priv->metrics);
+			gf_log("sh", GF_LOG_INFO, "qos_monitor_writev prepared.");
+		} else {
+			gf_log("sh", GF_LOG_ERROR, "priv->metrics == NULL.");
+		}
+		UNLOCK(&priv->lock);
+		gf_log("sh", GF_LOG_INFO, "unlock");
+		
+        gf_log("sh", GF_LOG_INFO, "start wind.");
+        STACK_WIND (frame,
+                    qos_monitor_writev_cbk,
+                    FIRST_CHILD(this),
+                    FIRST_CHILD(this)->fops->writev,
+                    fd,
+                    vector,
+                    count,
+                    offset,
+                    iobref);
+		gf_log("sh", GF_LOG_INFO, "end wind.");
+        return 0;
+}
+
 
 int32_t
 init (xlator_t *this)
@@ -479,7 +605,7 @@ fini (xlator_t *this)
 }
 
 struct xlator_fops fops = {
-       
+       .writev      = qos_monitor_writev,
 };
 
 struct xlator_mops mops = {
