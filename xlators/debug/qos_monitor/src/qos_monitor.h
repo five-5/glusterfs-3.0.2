@@ -25,7 +25,7 @@
 #define CHANNEL "monitor"
 #define INTERNAL 10
 // get client_id related macros
-#define DELIMER "-"
+#define DELIMER "^^"
 #define CLIENTID 60
 #define TIMES 3
 #define KB 1024
@@ -50,7 +50,6 @@ typedef struct struct_client_id client_id_t;
 
 typedef struct CRedisPublisher {
     redisContext *_redis_context; // hiredis 
-	// redis related
 	char *redis_host;   
 	int redis_port;
 	char *channel;

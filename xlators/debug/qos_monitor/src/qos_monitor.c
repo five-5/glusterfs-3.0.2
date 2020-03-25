@@ -685,7 +685,7 @@ init (xlator_t *this)
         this->itable = FIRST_CHILD (this)->itable;
         
 		this->private = priv;
-		if (priv->qos_monitor_interval > 0) {
+		/*if (priv->qos_monitor_interval > 0) {
 			priv->monitor_thread_running = 1;
 			priv->monitor_thread_should_die = 0;
 			ret = pthread_create(&priv->monitor_thread, NULL,
@@ -702,7 +702,7 @@ init (xlator_t *this)
 		this->private = priv;
 		gf_log(this->name, GF_LOG_INFO,
            "qos_monitor: thread should_die: %d", ((qos_monitor_private_t *)this->private)->monitor_thread_should_die);
-		gf_log (this->name, GF_LOG_INFO,
+		*/gf_log (this->name, GF_LOG_INFO,
                         "hello from qos_monitor.");
 		return ret;
 
@@ -728,11 +728,14 @@ fini (xlator_t *this)
                 "io-stats translator unloaded");
         return;
 }
+/*
+.writev 	 = qos_monitor_writev,
+	   .readv		= qos_monitor_readv,
 
+*/
 
 struct xlator_fops fops = {
-        .writev      = qos_monitor_writev,
-        .readv       = qos_monitor_readv,
+       
 };
 
 struct xlator_mops mops = {
