@@ -146,12 +146,17 @@ int publish(const char *channel_name, const char *message, void *pthis)
         channel_name, message);
     if (reply == NULL)
     {
-        gf_log("monitor", GF_LOG_ERROR,
-               "Publish command failed[%d]: %s\n", reply->err, reply->errstr);
+        gf_log("sh", GF_LOG_ERROR,
+               "Publish command failed[%d]: %s\n", p->_redis_context->err, p->_redis_context->errstr);
         return 0;
     } else {
-		gf_log("monitor", GF_LOG_INFO,
+		if (reply->type == REDIS_REPLY_ERROR) {
+			gf_log("sh", GF_LOG_ERROR,
+               "Publish command failed: %s\n",reply->error);
+		} else {
+			gf_log("sh", GF_LOG_INFO,
                "publish %s %s\n", channel_name, message);
+		}
 		freeReplyObject(reply);
         return 1;
     }
@@ -208,6 +213,7 @@ void func(dict_t *this, char *key, data_t *value, void *data)
 	char client[CLIENTID];
 	char server_ip[16];
 	double duration = 0;
+	int ret = 0;
 	
 	priv = (qos_monitor_private_t *)data;
 	monitor_data = (struct qos_monitor_data *)data_to_ptr(value);
@@ -227,8 +233,9 @@ void func(dict_t *this, char *key, data_t *value, void *data)
 					, "app_w_delay", monitor_data->write_delay.value
 					, "app_diops", monitor_data->data_iops / duration);
 
-	publish(priv->publisher->channel, message, priv->publisher);
-	
+	ret = publish(priv->publisher->channel, message, priv->publisher);
+	if (ret)
+		gf_log("sh", GF_LOG_ERROR, "publish failed.");
 	monitor_data->started_at = now;
 }
 
