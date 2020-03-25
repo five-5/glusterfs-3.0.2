@@ -51,12 +51,12 @@ double time_difference(struct timeval *begin, struct timeval *end)
 	return duration;
 }
 
-double time_difference_ms(struct timeval *begin, struct timeval *end)
+double time_difference_us(struct timeval *begin, struct timeval *end)
 {
 	double duration = 0;
 	if (begin == NULL || end == NULL)
 		return duration;
-	duration = (end->tv_sec - begin->tv_sec) * 1000 + ((end->tv_usec - begin->tv_usec) / 1000);
+	duration = (end->tv_sec - begin->tv_sec) * 1000000 + ((end->tv_usec - begin->tv_usec));
 	return duration;
 }
 
@@ -101,116 +101,13 @@ void get_client_id(char *client, char *client_id)
 	}  
 }
 
-/* hiredis 相关函数*/
-// 事件分发线程函数
-void *event_proc(void *pthis)
-{
-    CRedisPublisher *p = (CRedisPublisher *)pthis;
-    sem_wait(&p->_event_sem);
-
-	// 开启事件分发，event_base_dispatch会阻塞
-    event_base_dispatch(p->_event_base);
-
-    return NULL;
-}
-
-void *event_thread(void *data)
-{
-    if (NULL == data)
-    {
-        gf_log("monitor", GF_LOG_ERROR,
-               "even_thread Error!\n");
-        return NULL;
-    }
-
-    return event_proc(data);
-}
-
-void pubCallback(redisAsyncContext *c, void *r, void *priv) 
-{
-    redisReply *reply = (redisReply *)r;
-	struct timeval now;
-    if (reply == NULL) return;
-	gettimeofday(&now, NULL);
-	gf_log("monitor", GF_LOG_ERROR,
-               "[pub_cbk] %ld\n", now.tv_sec*1000000+now.tv_usec);
-} 
-
- 
-void connectCallback(const redisAsyncContext *c, int status) 
-{
-    if (status != REDIS_OK) {
-		gf_log("monitor", GF_LOG_ERROR,
-               "Error: %s\n", c->errstr);
-        return;
-    }
-	gf_log("monitor", GF_LOG_ERROR,
-               "Connected...\n");
-}
- 
-void disconnectCallback(const redisAsyncContext *c, int status) 
-{
-    if (status != REDIS_OK) {
-		gf_log("monitor", GF_LOG_ERROR,
-               "Error: %s\n", c->errstr);
-        return;
-    }
-    gf_log("monitor", GF_LOG_ERROR,
-               "Disconnected...\n");
-}
-
-
 /* CRedisPublisher */
-int redis_init(void *pthis)
-{
-    CRedisPublisher *p = (CRedisPublisher *)pthis;
-    // initialize the event
-    p->_event_base = event_base_new();    
-    if (NULL == p->_event_base)
-    {
-		gf_log("monitor", GF_LOG_ERROR,
-               "Create redis event failed.\n");
-        return 0;
-    }
-
-    memset(&p->_event_sem, 0, sizeof(p->_event_sem));
-    int ret = sem_init(&p->_event_sem, 0, 0);
-    if (ret != 0)
-    {
-		gf_log("monitor", GF_LOG_ERROR,
-               "Init sem failed.\n");
-        return 0;
-    }
-
-    return 1;
-}
-
-int redis_uninit(void *pthis)
-{
-    CRedisPublisher *p = (CRedisPublisher *)pthis;
-	event_base_free(p->_event_base);
-    p->_event_base = NULL;
-
-    sem_destroy(&p->_event_sem);
-	
-	if (p->redis_host != NULL) {
-		FREE(p->redis_host);
-		p->redis_host = NULL;
-	}
-	if (p->channel != NULL) {
-		FREE(p->channel);
-		p->channel = NULL;
-	}
-		
-    return 1;
-}
-
 int redis_disconnect(void *pthis)
 {
     CRedisPublisher *p = (CRedisPublisher *)pthis;
     if (p->_redis_context)
     {
-        redisAsyncDisconnect(p->_redis_context);
+        redisFree(p->_redis_context);
         p->_redis_context = NULL;
     }
 
@@ -221,7 +118,7 @@ int redis_connect(void *pthis)
 {
     CRedisPublisher *p = (CRedisPublisher *)pthis;
     // connect redis
-    p->_redis_context = redisAsyncConnect(p->redis_host, p->redis_port);    // 异步连接到redis服务器上，使用默认端口
+    p->_redis_context = redisConnect(p->redis_host, p->redis_port);    // 异步连接到redis服务器上，使用默认端口
     if (NULL == p->_redis_context)
     {
 		gf_log("monitor", GF_LOG_ERROR,
@@ -237,59 +134,28 @@ int redis_connect(void *pthis)
         return 0;
     }
 
-    // attach the event
-    redisLibeventAttach(p->_redis_context, p->_event_base);    // 将事件绑定到redis context上，使设置给redis的回调跟事件关联
-
-    // 创建事件处理线程
-    int ret = pthread_create(&p->_event_thread, NULL, event_thread, (void *)p);
-    if (ret != 0)
-    {
-		gf_log("monitor", GF_LOG_ERROR,
-               "create event thread failed.\n");
-        redis_disconnect(p);
-        return 0;
-    }
-
-	// 设置连接回调，当异步调用连接后，服务器处理连接请求结束后调用，通知调用者连接的状态
-    redisAsyncSetConnectCallback(p->_redis_context, &connectCallback);
-
-	// 设置断开连接回调，当服务器断开连接后，通知调用者连接断开，调用者可以利用这个函数实现重连
-    redisAsyncSetDisconnectCallback(p->_redis_context, &disconnectCallback);
-
-	// 启动事件线程
-    sem_post(&p->_event_sem);
     return 1;
 }
 
 int publish(const char *channel_name, const char *message, void *pthis)
 {
     CRedisPublisher *p = (CRedisPublisher *)pthis;
-    int ret = redisAsyncCommand(p->_redis_context,
-        &pubCallback, p, "PUBLISH %s %s",
+	redisReply *reply;
+    reply = redisCommand(p->_redis_context,
+        "PUBLISH %s %s",
         channel_name, message);
-    if (REDIS_ERR == ret)
+    if (reply == NULL)
     {
         gf_log("monitor", GF_LOG_ERROR,
-               "Publish command failed: %d\n", ret);
+               "Publish command failed[%d]: %s\n", reply->err, reply->errstr);
         return 0;
     } else {
 		gf_log("monitor", GF_LOG_INFO,
                "publish %s %s\n", channel_name, message);
+		freeReplyObject(reply);
         return 1;
     }
-}
-
-static void
-qos_monitor_data_clear(dict_t *metrics)
-{
-	ERR_ABORT (metrics);  
-	gf_log("monitor", GF_LOG_INFO, "enter qos_monitor_data_clear");
-	if (metrics->count > 0)
-	{
-		dict_destroy(metrics);
-		metrics = dict_new();
-	}
-	gf_log("monitor", GF_LOG_INFO, "qos_monitor_data_clear finished.");
+	
 }
 
 void get_server_ip(char *result)
@@ -335,7 +201,7 @@ void get_server_ip(char *result)
 void func(dict_t *this, char *key, data_t *value, void *data)
 {
 	gf_log("monitor", GF_LOG_INFO, "enter func");
-	char message[MSGLEN];
+	char *message;
 	qos_monitor_private_t *priv = NULL;
 	struct qos_monitor_data *monitor_data = NULL;
 	struct timeval now;
@@ -349,29 +215,19 @@ void func(dict_t *this, char *key, data_t *value, void *data)
 	gettimeofday(&now, NULL);
 	get_client_id(key, client); 
 	get_server_ip(server_ip);
-	
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_wbw", monitor_data->data_written);
-	publish(priv->publisher->channel, message, priv->publisher);
-	usleep(REDIS_INTERVAL);
-
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_rbw", monitor_data->data_read);
-	publish(priv->publisher->channel, message, priv->publisher);
-	usleep(REDIS_INTERVAL);
-
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_r_delay", monitor_data->read_delay.value);
-	publish(priv->publisher->channel, message, priv->publisher);
-	usleep(REDIS_INTERVAL);
-
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_w_delay", monitor_data->write_delay.value);
-	publish(priv->publisher->channel, message, priv->publisher);
-	usleep(REDIS_INTERVAL);
 
 	duration = time_difference(&monitor_data->started_at ,&now);
 	if (duration == 0)
 		duration = 1;
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_diops", monitor_data->data_iops / duration);
+	
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf^^%s^^%lf^^%s^^%lf^^%s^^%lf^^%s^^%lf", server_ip, client, now.tv_sec
+					, "app_wbw", monitor_data->data_written
+					, "app_rbw", monitor_data->data_read
+					, "app_r_delay", monitor_data->read_delay.value
+					, "app_w_delay", monitor_data->write_delay.value
+					, "app_diops", monitor_data->data_iops / duration);
+
 	publish(priv->publisher->channel, message, priv->publisher);
-	usleep(REDIS_INTERVAL);
 	
 	monitor_data->started_at = now;
 }
@@ -449,7 +305,6 @@ void qos_private_destroy(qos_monitor_private_t *priv)
 	
 	_qos_destroy_monitor_thread(priv);
 	redis_disconnect(priv->publisher);
-	redis_uninit(priv->publisher);
 	
 	LOCK_DESTROY (&priv->lock);
 	if (priv->publisher)
@@ -524,7 +379,7 @@ qos_monitor_writev_cbk (call_frame_t *frame,
 				end = monitor_data->write_delay.unwind_at;
 				duration = (time_difference(&begin, &end) != 0 ? time_difference(&begin, &end) : 1);
 				monitor_data->data_written = (monitor_data->data_written + op_ret / KB / duration) / 2;
-				monitor_data->write_delay.value = (monitor_data->write_delay.value + time_difference_ms(&begin, &end)) / 2;
+				monitor_data->write_delay.value = (monitor_data->write_delay.value + time_difference_us(&begin, &end)) / 2;
 				gf_log("sh", GF_LOG_INFO, "value = %lf", monitor_data->write_delay.value);
 			}
 			data_unref(data_from_ptr((void*)monitor_data));
@@ -754,7 +609,6 @@ init (xlator_t *this)
 		int ret = -1;
 		char *redis_host;
 		char *publish_channel;
-		int32_t redis_port, redis_publish_interval;
 
         if (!this)
                 return -1;
@@ -787,10 +641,7 @@ init (xlator_t *this)
 		redis_port = data_to_int32 (dict_get (options, "redis-port"));
 		if (redis_port == -1)
 			redis_port = PORT;
-		redis_publish_interval = data_to_int32 (dict_get (options, "redis-publish-interval"));
-		if (redis_publish_interval == -1)
-			redis_publish_interval = REDIS_INTERVAL;
-		REDIS_INTERVAL = redis_publish_interval;
+
         LOCK_INIT (&priv->lock);
 		
 		if (interval != 0)
@@ -824,16 +675,6 @@ init (xlator_t *this)
 		gf_log (this->name, GF_LOG_INFO,
                         "interval = %d, redis-host: %s, publish-channel: %s, redis-port: %d", 
 						priv->qos_monitor_interval, priv->publisher->redis_host, priv->publisher->channel, priv->publisher->redis_port);
-		
-		ret = redis_init(priv->publisher);
-		if (!ret)
-		{
-			gf_log(this->name, GF_LOG_ERROR,
-				   "Redis publisher init failed.");
-		} else {
-			gf_log(this->name, GF_LOG_INFO,
-				   "Redis publisher inited.");
-		}
 		
 		ret = redis_connect(priv->publisher);
 		if (!ret)
@@ -916,9 +757,6 @@ struct volume_options options[] = {
           .type = GF_OPTION_TYPE_STR,
         },
 		{ .key  = {"redis-port", "port"},
-          .type = GF_OPTION_TYPE_INT,
-        },
-        { .key  = {"redis-publish-interval", "publish-interval"},
           .type = GF_OPTION_TYPE_INT,
         },
         { .key  = {NULL} },

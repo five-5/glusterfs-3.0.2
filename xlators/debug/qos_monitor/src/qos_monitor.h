@@ -14,13 +14,10 @@
 
 #include <errno.h>
 #include <stdlib.h>
-#include <semaphore.h>
 #include <pthread.h>
 #include <sys/time.h>
 
 #include <hiredis/hiredis.h> 
-#include <hiredis/async.h>
-#include <hiredis/adapters/libevent.h>
 
 // default option value 
 #define HOST  "10.10.1.13"
@@ -33,9 +30,7 @@
 #define TIMES 3
 #define KB 1024
 #define MB 1024*1024
-#define MSGLEN 150
 
-int32_t REDIS_INTERVAL = 1000;
 /* changed from struct _server_connection
 * used for identity client
  */
@@ -54,10 +49,7 @@ struct struct_client_id {
 typedef struct struct_client_id client_id_t;
 
 typedef struct CRedisPublisher {
-    struct event_base *_event_base; // libevent
-    pthread_t _event_thread; 	    // event thread ID
-    sem_t _event_sem;               // event thread 
-    redisAsyncContext *_redis_context; // hiredis 
+    redisContext *_redis_context; // hiredis 
 	// redis related
 	char *redis_host;   
 	int redis_port;
@@ -90,13 +82,6 @@ struct qos_monitor_private {
 };
 typedef struct qos_monitor_private qos_monitor_private_t;
 
-void *event_proc(void *pthis);
-void *event_thread(void *data);
-void pubCallback(redisAsyncContext *c, void *r, void *priv);
-void connectCallback(const redisAsyncContext *c, int status);
-void disconnectCallback(const redisAsyncContext *c, int status);
-int redis_init(void *pthis);
-int redis_uninit(void *pthis);
 int redis_disconnect(void *pthis);
 int redis_connect(void *pthis);
 int publish(const char *channel_name, const char *message, void *pthis);
