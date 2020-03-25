@@ -25,13 +25,13 @@
 #define CHANNEL "monitor"
 #define INTERNAL 10
 // get client_id related macros
-#define DELIMER "^^"
+#define CDELIMER "-"
 #define CLIENTID 60
 #define TIMES 3
 #define KB 1024
 #define MB 1024*1024
 #define MSG_LENTH 300
-
+#define DELIMER "^^"
 /* changed from struct _server_connection
 * used for identity client
  */
