@@ -616,6 +616,7 @@ init (xlator_t *this)
 		int ret = -1;
 		char *redis_host;
 		char *publish_channel;
+		int32_t redis_port;
 
         if (!this)
                 return -1;
