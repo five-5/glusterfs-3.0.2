@@ -51,6 +51,16 @@ double time_difference(struct timeval *begin, struct timeval *end)
 	return duration;
 }
 
+double time_difference_ms(struct timeval *begin, struct timeval *end)
+{
+	double duration = 0;
+	if (begin == NULL || end == NULL)
+		return duration;
+	duration = (end->tv_sec - begin->tv_sec) * 1000 + ((end->tv_usec - begin->tv_usec) / 1000);
+	return duration;
+}
+
+
 double time_difference_us(struct timeval *begin, struct timeval *end)
 {
 	double duration = 0;
@@ -144,24 +154,16 @@ int publish(const char *channel_name, const char *message, void *pthis)
     reply = redisCommand(p->_redis_context,
         "PUBLISH %s %s",
         channel_name, message);
-	
-	freeReplyObject(reply);
-	gf_log("sh", GF_LOG_INFO,
-           "publish %s %s\n", channel_name, message);
-	return 1;
-   /* if (reply == NULL)
+	if (reply == NULL)
     {
         gf_log("sh", GF_LOG_ERROR,
                "Publish command failed[%d]: %s\n", p->_redis_context->err, p->_redis_context->errstr);
-        return 0;
-    } else {
-	
-		gf_log("sh", GF_LOG_INFO,
+        return -1;
+    } 
+	freeReplyObject(reply);
+	gf_log("sh", GF_LOG_INFO,
            "publish %s %s\n", channel_name, message);
-		
-		freeReplyObject(reply);
-        return 1;
-    }*/
+	return 0;
 	
 }
 
@@ -208,7 +210,7 @@ void get_server_ip(char *result)
 void func(dict_t *this, char *key, data_t *value, void *data)
 {
 	gf_log("monitor", GF_LOG_INFO, "enter func");
-	char message[MSG_LENTH];
+	char message[MSGLEN];
 	qos_monitor_private_t *priv = NULL;
 	struct qos_monitor_data *monitor_data = NULL;
 	struct timeval now;
@@ -225,8 +227,8 @@ void func(dict_t *this, char *key, data_t *value, void *data)
 	get_server_ip(server_ip);
 
 	duration = time_difference(&monitor_data->started_at ,&now);
-	if (duration == 0)
-		duration = 1;
+	if (duration < 1e-15)
+		duration = 1.0;
 
 	sprintf(message, "%s%s%s%s%ld%s%s%s%.2lf%s%s%s%.2lf%s%s%s%.2lf%s%s%s%.2lf%s%s%s%.2lf", server_ip, DELIMER, client, DELIMER, now.tv_sec, DELIMER
 					, "app_wbw", DELIMER, monitor_data->data_written, DELIMER
@@ -236,7 +238,7 @@ void func(dict_t *this, char *key, data_t *value, void *data)
 					, "app_diops", DELIMER, monitor_data->data_iops / duration);
 
 	ret = publish(priv->publisher->channel, message, priv->publisher);
-	if (ret == 0)
+	if (ret != 0)
 		gf_log("sh", GF_LOG_ERROR, "publish failed.");
 	monitor_data->started_at = now;
 
@@ -304,24 +306,13 @@ void qos_private_destroy(qos_monitor_private_t *priv)
 	
 	_qos_destroy_monitor_thread(priv);
 	redis_disconnect(priv->publisher);
-	
-	LOCK_DESTROY (&priv->lock);
+
 	if (priv->publisher)
 	{   
-		if (priv->publisher->redis_host)
-		{
-			FREE(priv->publisher->redis_host);
-			priv->publisher->redis_host = NULL;
-		}
-		if (priv->publisher->channel)
-		{
-			FREE(priv->publisher->channel);
-			priv->publisher->channel = NULL;
-		}
 		FREE(priv->publisher);
 		priv->publisher = NULL;
-	}
-		
+	}	
+	LOCK_DESTROY (&priv->lock);	
 	FREE (priv);
 	gf_log("sh", GF_LOG_INFO, "qos_private_destroy finished.");
 }
@@ -360,7 +351,7 @@ qos_monitor_writev_cbk (call_frame_t *frame,
 		double duration;
 		int ret = 0;
 
-		gf_log("sh", GF_LOG_INFO, "enter qos_monitor_writev_cbk.");
+		gf_log("sh", GF_LOG_INFO, "enter.");
         priv = this->private;
 		client = (client_id_t*) frame->root->trans;
 		
@@ -376,9 +367,9 @@ qos_monitor_writev_cbk (call_frame_t *frame,
 				gettimeofday(&monitor_data->write_delay.unwind_at, NULL);
 				begin = monitor_data->write_delay.wind_at;
 				end = monitor_data->write_delay.unwind_at;
-				duration = (time_difference(&begin, &end) != 0 ? time_difference(&begin, &end) : 1);
-				monitor_data->data_written = (monitor_data->data_written + op_ret / KB / duration) / 2;
-				monitor_data->write_delay.value = (monitor_data->write_delay.value + time_difference_us(&begin, &end)) / 2;
+				duration = (time_difference_ms(&begin, &end) != 0 ? time_difference(&begin, &end) : 1);
+				monitor_data->data_written = (monitor_data->data_written + op_ret / KB / duration * 1000) / 2;
+				monitor_data->write_delay.value = (monitor_data->write_delay.value + time_difference_ms(&begin, &end)) / 2;
 				gf_log("sh", GF_LOG_INFO, "value = %lf", monitor_data->write_delay.value);
 			}
 			
@@ -388,9 +379,9 @@ qos_monitor_writev_cbk (call_frame_t *frame,
 		}
 		UNLOCK(&priv->lock);
 
-		gf_log("sh", GF_LOG_INFO, "qos_monitor_writev_cbk unwind start.");
+		gf_log("sh", GF_LOG_INFO, "unwind start.");
 		STACK_UNWIND (frame, op_ret, op_errno, prebuf, postbuf);
-		gf_log("sh", GF_LOG_INFO, "qos_monitor_writev_cbk unwind end.");
+		gf_log("sh", GF_LOG_INFO, "unwind end.");
         return 0;
 }
 
@@ -410,12 +401,11 @@ qos_monitor_writev (call_frame_t *frame,
 		struct qos_monitor_data *monitor_data = NULL;
 		int ret = 0;
 		
-		gf_log("sh", GF_LOG_INFO, "enter qos_monitor_writev.");
+		gf_log("sh", GF_LOG_INFO, "enter.");
         priv = this->private;
 		client = (client_id_t*) frame->root->trans;
 
 		LOCK(&priv->lock);
-		gf_log("sh", GF_LOG_INFO, "lock");
 		if (priv->metrics != NULL) {
 			gf_log("sh", GF_LOG_INFO, "priv->metrics != NULL.");
 			
@@ -444,7 +434,6 @@ qos_monitor_writev (call_frame_t *frame,
 			gf_log("sh", GF_LOG_ERROR, "priv->metrics == NULL.");
 		}
 		UNLOCK(&priv->lock);
-		gf_log("sh", GF_LOG_INFO, "unlock");
 		
         gf_log("sh", GF_LOG_INFO, "start wind.");
         STACK_WIND (frame,
@@ -512,22 +501,14 @@ init (xlator_t *this)
 		
 		// redis相关数据结构初始化
 		if (redis_host) {
-			priv->publisher->redis_host = CALLOC (1, sizeof(*redis_host));
-			ERR_ABORT(priv->publisher->redis_host);
 			strcpy(priv->publisher->redis_host, redis_host);
 		} else {
-			priv->publisher->redis_host = CALLOC (1, sizeof(HOST));
-			ERR_ABORT(priv->publisher->redis_host);
 			strcpy(priv->publisher->redis_host, HOST);
 		}
 		
 		if (publish_channel) {
-			priv->publisher->channel = CALLOC (1, sizeof(*publish_channel));
-			ERR_ABORT(priv->publisher->channel);
 			strcpy(priv->publisher->channel, publish_channel);
 		} else {
-			priv->publisher->channel = CALLOC (1, sizeof(CHANNEL));
-			ERR_ABORT(priv->publisher->channel);
 			strcpy(priv->publisher->channel, CHANNEL);
 		}
 		

@@ -24,13 +24,14 @@
 #define PORT 6379
 #define CHANNEL "monitor"
 #define INTERNAL 10
+#define CHAL_LEN 16           // channel lenth
 // get client_id related macros
 #define CDELIMER "-"
 #define CLIENTID 60
 #define TIMES 3
 #define KB 1024
 #define MB 1024*1024
-#define MSG_LENTH 300
+#define MSGLEN 300
 #define DELIMER "^^"
 /* changed from struct _server_connection
 * used for identity client
@@ -51,9 +52,9 @@ typedef struct struct_client_id client_id_t;
 
 typedef struct CRedisPublisher {
     redisContext *_redis_context; // hiredis 
-	char *redis_host;   
+	char redis_host[16];   
 	int redis_port;
-	char *channel;
+	char channel[CHAL_LEN];
 }CRedisPublisher;
 
 struct qos_local {
