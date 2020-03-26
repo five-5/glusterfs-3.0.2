@@ -341,8 +341,7 @@ void func(dict_t *this, char *key, data_t *value, void *data)
 	struct timeval now;
 	char client[CLIENTID];
 	char server_ip[16];
-	double duration = 0;
-         long timestp = 0;	
+        long timestp = 0;	
 	priv = (qos_monitor_private_t *)data;
 	monitor_data = (struct qos_monitor_data *)data_to_ptr(value);
 	
@@ -351,11 +350,11 @@ void func(dict_t *this, char *key, data_t *value, void *data)
 	get_server_ip(server_ip);
         timestp = now.tv_sec * 1000 + (now.tv_usec / 1000);
 	
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, timestp, "app_wbw", monitor_data->data_written);
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, timestp, "app_wbw", monitor_data->data_written/priv->qos_monitor_interval);
 	publish(priv->publisher->channel, message, priv->publisher);
 	usleep(REDIS_INTERVAL);
 
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, timestp, "app_rbw", monitor_data->data_read);
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, timestp, "app_rbw", monitor_data->data_read/priv->qos_monitor_interval);
 	publish(priv->publisher->channel, message, priv->publisher);
 	usleep(REDIS_INTERVAL);
 
@@ -367,14 +366,11 @@ void func(dict_t *this, char *key, data_t *value, void *data)
 	publish(priv->publisher->channel, message, priv->publisher);
 	usleep(REDIS_INTERVAL);
 
-	duration = time_difference(&monitor_data->started_at ,&now);
-	if (duration == 0)
-		duration = 1;
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, timestp, "app_diops", monitor_data->data_iops / duration);
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, timestp, "app_diops", monitor_data->data_iops / priv->qos_monitor_interval);
 	publish(priv->publisher->channel, message, priv->publisher);
 	usleep(REDIS_INTERVAL);
 	
-	monitor_data->started_at = now;
+	_qos_init_monitor_data(monitor_data);
 }
 
 void * _qos_monitor_thread(xlator_t *this)
@@ -504,7 +500,6 @@ qos_monitor_writev_cbk (call_frame_t *frame,
 		struct qos_monitor_data *monitor_data = NULL;
 		struct timeval begin;
 		struct timeval end;
-		double duration;
 		int ret = 0;
 
 		gf_log("sh", GF_LOG_INFO, "enter qos_monitor_writev_cbk.");
@@ -523,8 +518,7 @@ qos_monitor_writev_cbk (call_frame_t *frame,
 				gettimeofday(&monitor_data->write_delay.unwind_at, NULL);
 				begin = monitor_data->write_delay.wind_at;
 				end = monitor_data->write_delay.unwind_at;
-				duration = (time_difference(&begin, &end) != 0 ? time_difference(&begin, &end) : 1);
-				monitor_data->data_written = (monitor_data->data_written + op_ret / KB / duration) / 2;
+				monitor_data->data_written = monitor_data->data_written + op_ret / KB ;
 				monitor_data->write_delay.value = (monitor_data->write_delay.value + time_difference_ms(&begin, &end)) / 2;
 				gf_log("sh", GF_LOG_INFO, "value = %lf", monitor_data->write_delay.value);
 			}
@@ -559,7 +553,6 @@ qos_monitor_readv_cbk (call_frame_t *frame,
 	struct qos_monitor_data *monitor_data = NULL;
 	struct timeval begin;
 	struct timeval end;
-	double duration;
 	int ret = 0;
 
 	gf_log("sh", GF_LOG_INFO, "enter.");
@@ -578,8 +571,7 @@ qos_monitor_readv_cbk (call_frame_t *frame,
 			gettimeofday(&monitor_data->read_delay.unwind_at, NULL);
 			begin = monitor_data->read_delay.wind_at;
 			end = monitor_data->read_delay.unwind_at;
-			duration = (time_difference(&begin, &end) != 0 ? time_difference(&begin, &end) : 1);
-			monitor_data->data_read = (monitor_data->data_read + op_ret / KB / duration) / 2;
+			monitor_data->data_read = monitor_data->data_read + op_ret / KB ;
 			monitor_data->read_delay.value = (monitor_data->read_delay.value + time_difference_ms(&begin, &end)) / 2;
 			gf_log("sh", GF_LOG_INFO, "value = %lf", monitor_data->read_delay.value);
 		}
