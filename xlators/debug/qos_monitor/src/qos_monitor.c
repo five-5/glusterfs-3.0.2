@@ -1,14 +1,17 @@
 /*
   Copyright (c) 2006-2009 Gluster, Inc. <http://www.gluster.com>
   This file is part of GlusterFS.
+
   GlusterFS is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published
   by the Free Software Foundation; either version 3 of the License,
   or (at your option) any later version.
+
   GlusterFS is distributed in the hope that it will be useful, but
   WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
   General Public License for more details.
+
   You should have received a copy of the GNU General Public License
   along with this program.  If not, see
   <http://www.gnu.org/licenses/>.
@@ -339,6 +342,7 @@ void func(dict_t *this, char *key, data_t *value, void *data)
 	char client[CLIENTID];
 	char server_ip[16];
 	double duration = 0;
+	long timestamp = 0;
 	
 	priv = (qos_monitor_private_t *)data;
 	monitor_data = (struct qos_monitor_data *)data_to_ptr(value);
@@ -346,27 +350,28 @@ void func(dict_t *this, char *key, data_t *value, void *data)
 	gettimeofday(&now, NULL);
 	get_client_id(key, client); 
 	get_server_ip(server_ip);
+	timestamp = now.tv_sec * 1000 + now.tv_usec/1000;
 	
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_wbw", monitor_data->data_written);
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, timestamp, "app_wbw", monitor_data->data_written);
 	publish(priv->publisher->channel, message, priv->publisher);
 	usleep(REDIS_INTERVAL);
 
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_rbw", monitor_data->data_read);
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, timestamp, "app_rbw", monitor_data->data_read);
 	publish(priv->publisher->channel, message, priv->publisher);
 	usleep(REDIS_INTERVAL);
 
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_r_delay", monitor_data->read_delay.value);
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, timestamp, "app_r_delay", monitor_data->read_delay.value);
 	publish(priv->publisher->channel, message, priv->publisher);
 	usleep(REDIS_INTERVAL);
 
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_w_delay", monitor_data->write_delay.value);
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, timestamp, "app_w_delay", monitor_data->write_delay.value);
 	publish(priv->publisher->channel, message, priv->publisher);
 	usleep(REDIS_INTERVAL);
 
 	duration = time_difference(&monitor_data->started_at ,&now);
 	if (duration == 0)
 		duration = 1;
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_diops", monitor_data->data_iops / duration);
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, timestamp, "app_diops", monitor_data->data_iops / duration);
 	publish(priv->publisher->channel, message, priv->publisher);
 	usleep(REDIS_INTERVAL);
 	
