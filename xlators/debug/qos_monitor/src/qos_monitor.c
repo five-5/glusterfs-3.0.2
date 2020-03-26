@@ -342,34 +342,35 @@ void func(dict_t *this, char *key, data_t *value, void *data)
 	char client[CLIENTID];
 	char server_ip[16];
 	double duration = 0;
-	
+         long timestp = 0;	
 	priv = (qos_monitor_private_t *)data;
 	monitor_data = (struct qos_monitor_data *)data_to_ptr(value);
 	
 	gettimeofday(&now, NULL);
 	get_client_id(key, client); 
 	get_server_ip(server_ip);
+        timestp = now.tv_sec * 1000 + (now.tv_usec / 1000);
 	
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_wbw", monitor_data->data_written);
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, timestp, "app_wbw", monitor_data->data_written);
 	publish(priv->publisher->channel, message, priv->publisher);
 	usleep(REDIS_INTERVAL);
 
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_rbw", monitor_data->data_read);
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, timestp, "app_rbw", monitor_data->data_read);
 	publish(priv->publisher->channel, message, priv->publisher);
 	usleep(REDIS_INTERVAL);
 
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_r_delay", monitor_data->read_delay.value);
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, timestp, "app_r_delay", monitor_data->read_delay.value);
 	publish(priv->publisher->channel, message, priv->publisher);
 	usleep(REDIS_INTERVAL);
 
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_w_delay", monitor_data->write_delay.value);
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, timestp, "app_w_delay", monitor_data->write_delay.value);
 	publish(priv->publisher->channel, message, priv->publisher);
 	usleep(REDIS_INTERVAL);
 
 	duration = time_difference(&monitor_data->started_at ,&now);
 	if (duration == 0)
 		duration = 1;
-	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, now.tv_sec, "app_diops", monitor_data->data_iops / duration);
+	sprintf(message, "%s^^%s^^%ld^^%s^^%lf", server_ip, client, timestp, "app_diops", monitor_data->data_iops / duration);
 	publish(priv->publisher->channel, message, priv->publisher);
 	usleep(REDIS_INTERVAL);
 	
